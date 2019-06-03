@@ -250,8 +250,8 @@ int tty_init(struct tty_serial *tty, struct device *uart_dev)
 
 	tty->rx_get = tty->rx_put = tty->tx_get = tty->tx_put = 0;
 
-	tty->rx_timeout = K_FOREVER;
-	tty->tx_timeout = K_FOREVER;
+	tty->rx_timeout = K_MSEC(100);
+	tty->tx_timeout = K_MSEC(100);
 
 	uart_irq_callback_user_data_set(uart_dev, tty_uart_isr, tty);
 
