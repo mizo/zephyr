@@ -75,11 +75,6 @@ static int tty_putchar(struct tty_serial *tty, u8_t c)
 	int tx_next;
 	int res;
 
-	res = k_sem_take(&tty->tx_sem, tty->tx_timeout);
-	if (res < 0) {
-		return res;
-	}
-
 	key = irq_lock();
 	tx_next = tty->tx_put + 1;
 	if (tx_next >= tty->tx_ringbuf_sz) {
@@ -88,6 +83,12 @@ static int tty_putchar(struct tty_serial *tty, u8_t c)
 	if (tx_next == tty->tx_get) {
 		irq_unlock(key);
 		return -ENOSPC;
+	}
+
+	res = k_sem_take(&tty->tx_sem, tty->tx_timeout);
+	if (res < 0) {
+		irq_unlock(key);
+		return res;
 	}
 
 	tty->tx_ringbuf[tty->tx_put] = c;
