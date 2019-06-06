@@ -419,6 +419,9 @@ static void cdc_acm_dev_status_cb(enum usb_dc_status_code status,
 	case USB_DC_CONFIGURED:
 		dev_data->tx_ready = 1;
 		LOG_DBG("USB device configured");
+		/* execute the pending work */
+		if (dev_data->cb)
+			k_work_submit(&dev_data->cb_work);
 		break;
 	case USB_DC_DISCONNECTED:
 		LOG_DBG("USB device disconnected");
