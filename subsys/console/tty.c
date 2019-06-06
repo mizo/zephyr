@@ -87,6 +87,7 @@ static int tty_putchar(struct tty_serial *tty, u8_t c)
 	}
 	if (tx_next == tty->tx_get) {
 		irq_unlock(key);
+		k_sem_give(&tty->tx_sem);
 		return -ENOSPC;
 	}
 
@@ -280,7 +281,7 @@ int tty_set_tx_buf(struct tty_serial *tty, void *buf, size_t size)
 	tty->tx_ringbuf = buf;
 	tty->tx_ringbuf_sz = size;
 
-	k_sem_init(&tty->tx_sem, size - 1, UINT_MAX);
+	k_sem_init(&tty->tx_sem, size, UINT_MAX);
 
 	/* New buffer is initially empty, no need to re-enable interrupts,
 	 * it will be done when needed (on first output char).
