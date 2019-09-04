@@ -18,6 +18,7 @@
 #include <bluetooth/hci_vs.h>
 #include <bluetooth/buf.h>
 #include <bluetooth/bluetooth.h>
+#include <bluetooth/controller.h>
 #include <drivers/bluetooth/hci_driver.h>
 #include <sys/byteorder.h>
 #include <sys/util.h>
@@ -3499,6 +3500,15 @@ s8_t hci_get_class(struct node_rx_pdu *node_rx)
 
 void hci_init(struct k_poll_signal *signal_host_buf)
 {
+#if defined(CONFIG_SOC_FAMILY_NRF)
+	bt_addr_t bdaddr;
+
+	sys_put_le32(NRF_FICR->DEVICEADDR[0], &bdaddr.val[0]);
+	sys_put_le16(NRF_FICR->DEVICEADDR[1], &bdaddr.val[4]);
+
+	bt_ctlr_set_public_addr(&bdaddr.val[0]);
+#endif
+
 #if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
 	hbuf_signal = signal_host_buf;
 #endif
