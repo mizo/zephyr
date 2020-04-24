@@ -17,8 +17,10 @@
 struct nrf5_802154_rx_frame {
 	void *fifo_reserved; /* 1st word reserved for use by fifo. */
 	u8_t *psdu; /* Pointer to a received frame. */
+	u32_t time; /* RX timestamp. */
 	u8_t lqi; /* Last received frame LQI value. */
 	s8_t rssi; /* Last received frame RSSI value. */
+	bool ack_fpb; /* FPB value in ACK sent for the received frame. */
 };
 
 struct nrf5_802154_data {
@@ -42,6 +44,9 @@ struct nrf5_802154_data {
 	 */
 	struct nrf5_802154_rx_frame rx_frames[NRF_802154_RX_BUFFERS];
 
+	/* Frame pending bit value in ACK sent for the last received frame. */
+	bool last_frame_ack_fpb;
+
 	/* CCA complete sempahore. Unlocked when CCA is complete. */
 	struct k_sem cca_wait;
 
@@ -61,10 +66,20 @@ struct nrf5_802154_data {
 	/* TX result, updated in radio transmit callbacks. */
 	u8_t tx_result;
 
-	/* A pointer to the received ACK frame. May be NULL if no ACK was
-	 * requested/received.
+	/* A buffer for the received ACK frame. psdu pointer be NULL if no
+	 * ACK was requested/received.
 	 */
-	u8_t *ack;
+	struct nrf5_802154_rx_frame ack_frame;
+
+	/* Callback handler of the currently ongoing energy scan.
+	 * It shall be NULL if energy scan is not in progress.
+	 */
+	energy_scan_done_cb_t energy_scan_done;
+
+	/* Callback handler to notify of any important radio events.
+	 * Can be NULL if event notification is not needed.
+	 */
+	ieee802154_event_cb_t event_handler;
 };
 
 #endif /* ZEPHYR_DRIVERS_IEEE802154_IEEE802154_NRF5_H_ */

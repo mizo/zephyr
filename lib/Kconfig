@@ -1,8 +1,5 @@
-#
 # Copyright (c) 2016 Intel Corporation
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 source "lib/libc/Kconfig"
 
@@ -12,6 +9,8 @@ source "lib/cmsis_rtos_v1/Kconfig"
 
 source "lib/cmsis_rtos_v2/Kconfig"
 
+source "lib/fnmatch/Kconfig"
+
 source "lib/gui/Kconfig"
 
 source "lib/os/Kconfig"
@@ -19,5 +18,7 @@ source "lib/os/Kconfig"
 source "lib/posix/Kconfig"
 
 source "lib/updatehub/Kconfig"
+
+source "lib/open-amp/Kconfig"
 
 endmenu

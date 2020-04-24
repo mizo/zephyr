@@ -1048,6 +1048,11 @@ int lwm2m_send_message(struct lwm2m_message *msg)
 		lwm2m_reset_message(msg, true);
 	}
 
+	if (IS_ENABLED(CONFIG_LWM2M_RD_CLIENT_SUPPORT) &&
+	    IS_ENABLED(CONFIG_LWM2M_QUEUE_MODE_ENABLED)) {
+		engine_update_tx_time();
+	}
+
 	return 0;
 }
 
@@ -1851,6 +1856,16 @@ int lwm2m_engine_get_resource(char *pathstr, struct lwm2m_engine_res **res)
 	return path_to_objs(&path, NULL, NULL, res, NULL);
 }
 
+void lwm2m_engine_get_binding(char *binding)
+{
+	if (IS_ENABLED(CONFIG_LWM2M_QUEUE_MODE_ENABLED)) {
+		strcpy(binding, "UQ");
+	} else {
+		/* Defaults to UDP. */
+		strcpy(binding, "U");
+	}
+}
+
 int lwm2m_engine_create_res_inst(char *pathstr)
 {
 	int ret, i;
@@ -2091,8 +2106,10 @@ static int lwm2m_read_handler(struct lwm2m_engine_obj_inst *obj_inst,
 
 		switch (obj_field->data_type) {
 
-		/* do nothing for OPAQUE (probably has a callback) */
 		case LWM2M_RES_TYPE_OPAQUE:
+			engine_put_opaque(&msg->out, &msg->path,
+					  (u8_t *)data_ptr,
+					  data_len);
 			break;
 
 		case LWM2M_RES_TYPE_STRING:
@@ -4202,8 +4219,8 @@ int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 int lwm2m_parse_peerinfo(char *url, struct sockaddr *addr, bool *use_dtls)
 {
 	struct http_parser_url parser;
-#if defined(CONFIG_DNS_RESOLVER)
-	struct addrinfo hints, *res;
+#if defined(CONFIG_LWM2M_DNS_SUPPORT)
+	struct addrinfo *res, hints = { 0 };
 #endif
 	int ret;
 	u16_t off, len;
@@ -4263,15 +4280,12 @@ int lwm2m_parse_peerinfo(char *url, struct sockaddr *addr, bool *use_dtls)
 	}
 
 	if (ret < 0) {
-#if defined(CONFIG_DNS_RESOLVER)
+#if defined(CONFIG_LWM2M_DNS_SUPPORT)
 #if defined(CONFIG_NET_IPV6) && defined(CONFIG_NET_IPV4)
 		hints.ai_family = AF_UNSPEC;
 #elif defined(CONFIG_NET_IPV6)
 		hints.ai_family = AF_INET6;
 #elif defined(CONFIG_NET_IPV4)
-		hints.ai_family = AF_INET;
-#elif defined(CONFIG_NET_SOCKETS_OFFLOAD)
-		memset(&hints, 0, sizeof(hints));
 		hints.ai_family = AF_INET;
 #else
 		hints.ai_family = AF_UNSPEC;
@@ -4290,7 +4304,7 @@ int lwm2m_parse_peerinfo(char *url, struct sockaddr *addr, bool *use_dtls)
 		freeaddrinfo(res);
 #else
 		goto cleanup;
-#endif /* CONFIG_DNS_RESOLVER */
+#endif /* CONFIG_LWM2M_DNS_SUPPORT */
 	}
 
 	/* set port */

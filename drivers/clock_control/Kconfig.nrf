@@ -1,7 +1,6 @@
-# Kconfig - Clock controller driver configuration options
-#
+# Clock controller driver configuration options
+
 # Copyright (c) 2016 Nordic Semiconductor ASA
-#
 # SPDX-License-Identifier: Apache-2.0
 
 config CLOCK_CONTROL_NRF_FORCE_ALT
@@ -11,11 +10,10 @@ config CLOCK_CONTROL_NRF_FORCE_ALT
 	  This option can be enabled to force an alternative implementation
 	  of the clock control driver.
 
-if !CLOCK_CONTROL_NRF_FORCE_ALT
-
 menuconfig CLOCK_CONTROL_NRF
 	bool "NRF Clock controller support"
 	depends on SOC_COMPATIBLE_NRF
+	depends on !CLOCK_CONTROL_NRF_FORCE_ALT
 	default y
 	help
 	  Enable support for the Nordic Semiconductor nRFxx series SoC clock
@@ -55,9 +53,8 @@ config CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION
 if CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION
 
 config CLOCK_CONTROL_NRF_CALIBRATION_PERIOD
-	int "Calibration opportunity period (in 250ms units)"
-	default 16
-	range 1 127
+	int "Calibration opportunity period in milliseconds"
+	default 4000
 	help
 	  Periodically, calibration action is performed. Action includes
 	  temperature measurement followed by clock calibration. Calibration may
@@ -85,7 +82,7 @@ config CLOCK_CONTROL_NRF_CALIBRATION_TEMP_DIFF
 	  this amount since the last calibration.
 
 config CLOCK_CONTROL_NRF_CALIBRATION_DEBUG
-	bool "Calibration intrumentation"
+	bool "Calibration instrumentation"
 	help
 	  Enables retrieving debug information like number of performed or
 	  skipped calibrations.
@@ -131,5 +128,3 @@ config CLOCK_CONTROL_NRF_K32SRC_20PPM
 endchoice
 
 endif # CLOCK_CONTROL_NRF
-
-endif #!CLOCK_CONTROL_NRF_FORCE_ALT

@@ -16,11 +16,15 @@
 		zephyr,shell-uart = &uart0;
 		zephyr,uart-mcumgr = &uart0;
 		zephyr,flash = &flash0;
+		zephyr,entropy = &rng;
 	};
 
+	aliases {
+		eeprom-0 = &eeprom0;
+	};
 
 	flashcontroller0: flash-controller@0 {
-		compatible = "zephyr,native-posix-flash-controller";
+		compatible = "zephyr,sim-flash";
 		reg = <0x00000000 DT_SIZE_K(2048)>;
 
 		#address-cells = <1>;
@@ -32,7 +36,7 @@
 			status = "okay";
 			compatible = "soc-nv-flash";
 			label = "flash";
-			erase-block-size = <1>;
+			erase-block-size = <4096>;
 			write-block-size = <1>;
 			reg = <0x00000000 DT_SIZE_K(2048)>;
 
@@ -65,6 +69,13 @@
 		};
 	};
 
+	eeprom0: eeprom {
+		status = "okay";
+		compatible = "zephyr,sim-eeprom";
+		label = "EEPROM_0";
+		size = <DT_SIZE_K(32)>;
+	};
+
 	uart0: uart {
 		status = "okay";
 		compatible = "zephyr,native-posix-uart";
@@ -74,4 +85,11 @@
 		 */
 		current-speed = <0>;
 	};
+
+	rng: rng {
+		status = "okay";
+		compatible = "zephyr,native-posix-rng";
+		label = "ENTROPY_0";
+	};
+
 };

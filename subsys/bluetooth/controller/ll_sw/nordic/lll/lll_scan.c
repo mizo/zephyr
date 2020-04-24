@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 Nordic Semiconductor ASA
+ * Copyright (c) 2018-2020 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,7 +8,9 @@
 #include <toolchain.h>
 #include <bluetooth/hci.h>
 #include <sys/byteorder.h>
+#include <soc.h>
 
+#include "hal/cpu.h"
 #include "hal/ccm.h"
 #include "hal/radio.h"
 #include "hal/ticker.h"
@@ -23,6 +25,7 @@
 
 #include "lll.h"
 #include "lll_vendor.h"
+#include "lll_clock.h"
 #include "lll_scan.h"
 #include "lll_conn.h"
 #include "lll_chan.h"
@@ -32,9 +35,9 @@
 #include "lll_tim_internal.h"
 #include "lll_prof_internal.h"
 
-#define LOG_MODULE_NAME bt_ctlr_llsw_nordic_lll_scan
+#define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
+#define LOG_MODULE_NAME bt_ctlr_lll_scan
 #include "common/log.h"
-#include <soc.h>
 #include "hal/debug.h"
 
 static int init_reset(void);
@@ -102,7 +105,7 @@ void lll_scan_prepare(void *param)
 	struct lll_prepare_param *p = param;
 	int err;
 
-	err = lll_clk_on();
+	err = lll_hfclock_on();
 	LL_ASSERT(!err || err == -EINPROGRESS);
 
 	err = lll_prepare(is_abort_cb, abort_cb, prepare_cb, 0, p);
@@ -117,7 +120,7 @@ static int init_reset(void)
 static int prepare_cb(struct lll_prepare_param *prepare_param)
 {
 	struct lll_scan *lll = prepare_param->param;
-	u32_t aa = sys_cpu_to_le32(0x8e89bed6);
+	u32_t aa = sys_cpu_to_le32(PDU_AC_ACCESS_ADDR);
 	u32_t ticks_at_event, ticks_at_start;
 	struct node_rx_pdu *node_rx;
 	struct evt_hdr *evt;
@@ -132,7 +135,7 @@ static int prepare_cb(struct lll_prepare_param *prepare_param)
 	if (lll_is_stop(lll)) {
 		int err;
 
-		err = lll_clk_off();
+		err = lll_hfclock_off();
 		LL_ASSERT(!err || err == -EBUSY);
 
 		lll_done(NULL);
@@ -141,12 +144,12 @@ static int prepare_cb(struct lll_prepare_param *prepare_param)
 		return 0;
 	}
 
-	node_rx = ull_pdu_rx_alloc_peek(1);
-	LL_ASSERT(node_rx);
-
 	radio_reset();
-	/* TODO: other Tx Power settings */
+#if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
+	radio_tx_power_set(lll->tx_pwr_lvl);
+#else
 	radio_tx_power_set(RADIO_TXP_DEFAULT);
+#endif
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 	/* TODO: if coded we use S8? */
@@ -157,6 +160,8 @@ static int prepare_cb(struct lll_prepare_param *prepare_param)
 	radio_pkt_configure(8, PDU_AC_PAYLOAD_SIZE_MAX, 0);
 #endif /* !CONFIG_BT_CTLR_ADV_EXT */
 
+	node_rx = ull_pdu_rx_alloc_peek(1);
+	LL_ASSERT(node_rx);
 	radio_pkt_rx_set(node_rx->pdu);
 
 	radio_aa_set((u8_t *)&aa);
@@ -167,6 +172,7 @@ static int prepare_cb(struct lll_prepare_param *prepare_param)
 
 	radio_isr_set(isr_rx, lll);
 
+	/* setup tIFS switching */
 	radio_tmr_tifs_set(EVENT_IFS_US);
 	radio_switch_complete_and_tx(0, 0, 0, 0);
 
@@ -283,8 +289,8 @@ static int is_abort_cb(void *next, int prio, void *curr,
 		*resume_cb = resume_prepare_cb;
 		*resume_prio = 0; /* TODO: */
 
-		/* Retain HF clk */
-		err = lll_clk_on();
+		/* Retain HF clock */
+		err = lll_hfclock_on();
 		LL_ASSERT(!err || err == -EINPROGRESS);
 
 		return -EAGAIN;
@@ -312,15 +318,21 @@ static void abort_cb(struct lll_prepare_param *prepare_param, void *param)
 		 * After event has been cleanly aborted, clean up resources
 		 * and dispatch event done.
 		 */
-		radio_isr_set(isr_abort, param);
-		radio_disable();
+		if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT) && lll_is_stop(param)) {
+			while (!radio_has_disabled()) {
+				cpu_sleep();
+			}
+		} else {
+			radio_isr_set(isr_abort, param);
+			radio_disable();
+		}
 		return;
 	}
 
 	/* NOTE: Else clean the top half preparations of the aborted event
 	 * currently in preparation pipeline.
 	 */
-	err = lll_clk_off();
+	err = lll_hfclock_off();
 	LL_ASSERT(!err || err == -EBUSY);
 
 	lll_done(param);
@@ -431,12 +443,12 @@ static void isr_tx(void *param)
 	}
 	/* TODO: MOVE ^^ */
 
-	node_rx = ull_pdu_rx_alloc_peek(1);
-	LL_ASSERT(node_rx);
-
-	radio_isr_set(isr_rx, param);
+	/* setup tIFS switching */
 	radio_tmr_tifs_set(EVENT_IFS_US);
 	radio_switch_complete_and_tx(0, 0, 0, 0);
+
+	node_rx = ull_pdu_rx_alloc_peek(1);
+	LL_ASSERT(node_rx);
 	radio_pkt_rx_set(node_rx->pdu);
 
 	/* assert if radio packet ptr is not set and radio started rx */
@@ -466,6 +478,8 @@ static void isr_tx(void *param)
 				 radio_tx_chain_delay_get(0, 0) -
 				 CONFIG_BT_CTLR_GPIO_LNA_OFFSET);
 #endif /* CONFIG_BT_CTLR_GPIO_LNA_PIN */
+
+	radio_isr_set(isr_rx, param);
 }
 
 static void isr_common_done(void *param)
@@ -486,13 +500,13 @@ static void isr_common_done(void *param)
 	}
 	/* TODO: MOVE ^^ */
 
-	node_rx = ull_pdu_rx_alloc_peek(1);
-	LL_ASSERT(node_rx);
-
+	/* setup tIFS switching */
 	radio_tmr_tifs_set(EVENT_IFS_US);
 	radio_switch_complete_and_tx(0, 0, 0, 0);
+
+	node_rx = ull_pdu_rx_alloc_peek(1);
+	LL_ASSERT(node_rx);
 	radio_pkt_rx_set(node_rx->pdu);
-	radio_rssi_measure();
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	if (ull_filter_lll_rl_enabled()) {
@@ -501,6 +515,8 @@ static void isr_common_done(void *param)
 		radio_ar_configure(count, irks);
 	}
 #endif /* CONFIG_BT_CTLR_PRIVACY */
+
+	radio_rssi_measure();
 
 	radio_isr_set(isr_rx, param);
 }
@@ -621,9 +637,13 @@ static void isr_cleanup(void *param)
 #endif /* !CONFIG_BT_CTLR_SCAN_INDICATION */
 
 	radio_isr_set(isr_race, param);
+	if (!radio_is_idle()) {
+		radio_disable();
+	}
+
 	radio_tmr_stop();
 
-	err = lll_clk_off();
+	err = lll_hfclock_off();
 	LL_ASSERT(!err || err == -EBUSY);
 
 	lll_done(NULL);
@@ -702,12 +722,11 @@ static inline u32_t isr_rx_pdu(struct lll_scan *lll, u8_t devmatch_ok,
 		}
 		evt = HDR_LLL2EVT(lll);
 		if (pdu_end_us > (HAL_TICKER_TICKS_TO_US(evt->ticks_slot) -
-				  502 - EVENT_OVERHEAD_START_US -
-				  (EVENT_JITTER_US << 1))) {
+				  EVENT_IFS_US - 352 - EVENT_OVERHEAD_START_US -
+				  EVENT_TICKER_RES_MARGIN_US)) {
 			return -ETIME;
 		}
 
-		radio_isr_set(isr_cleanup, lll);
 		radio_switch_complete_and_disable();
 
 		/* Acquire the connection context */
@@ -787,6 +806,7 @@ static inline u32_t isr_rx_pdu(struct lll_scan *lll, u8_t devmatch_ok,
 			lll_prof_cputime_capture();
 		}
 
+		radio_isr_set(isr_cleanup, lll);
 
 #if defined(CONFIG_BT_CTLR_GPIO_PA_PIN)
 		if (IS_ENABLED(CONFIG_BT_CTLR_PROFILE_ISR)) {
@@ -802,6 +822,12 @@ static inline u32_t isr_rx_pdu(struct lll_scan *lll, u8_t devmatch_ok,
 					 radio_rx_chain_delay_get(0, 0) -
 					 CONFIG_BT_CTLR_GPIO_PA_OFFSET);
 #endif /* CONFIG_BT_CTLR_GPIO_PA_PIN */
+
+#if defined(CONFIG_BT_CTLR_CONN_RSSI)
+		if (rssi_ready) {
+			lll_conn->rssi_latest =  radio_rssi_get();
+		}
+#endif /* CONFIG_BT_CTLR_CONN_RSSI */
 
 		/* block CPU so that there is no CRC error on pdu tx,
 		 * this is only needed if we want the CPU to sleep.
@@ -866,6 +892,10 @@ static inline u32_t isr_rx_pdu(struct lll_scan *lll, u8_t devmatch_ok,
 #endif /* CONFIG_BT_CTLR_PRIVACY */
 		u32_t err;
 
+		/* setup tIFS switching */
+		radio_tmr_tifs_set(EVENT_IFS_US);
+		radio_switch_complete_and_rx(0);
+
 		/* save the adv packet */
 		err = isr_rx_scan_report(lll, rssi_ready,
 					 irkmatch_ok ? rl_idx : FILTER_IDX_NONE,
@@ -896,12 +926,6 @@ static inline u32_t isr_rx_pdu(struct lll_scan *lll, u8_t devmatch_ok,
 		memcpy(&pdu_tx->scan_req.adv_addr[0],
 		       &pdu_adv_rx->adv_ind.addr[0], BDADDR_SIZE);
 
-		/* switch scanner state to active */
-		lll->state = 1U;
-		radio_isr_set(isr_tx, lll);
-
-		radio_tmr_tifs_set(EVENT_IFS_US);
-		radio_switch_complete_and_rx(0);
 		radio_pkt_tx_set(pdu_tx);
 
 		/* assert if radio packet ptr is not set and radio started tx */
@@ -930,6 +954,10 @@ static inline u32_t isr_rx_pdu(struct lll_scan *lll, u8_t devmatch_ok,
 					 radio_rx_chain_delay_get(0, 0) -
 					 CONFIG_BT_CTLR_GPIO_PA_OFFSET);
 #endif /* CONFIG_BT_CTLR_GPIO_PA_PIN */
+
+		/* switch scanner state to active */
+		lll->state = 1U;
+		radio_isr_set(isr_tx, lll);
 
 		return 0;
 	}

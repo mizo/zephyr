@@ -20,11 +20,11 @@ Building and Running
 ********************
 
 This sample can be built for multiple boards, in this example we will build it
-for the nrf52840_pca10056 board:
+for the nrf52840dk_nrf52840 board:
 
 .. zephyr-app-commands::
 	:zephyr-app: samples/subsys/usb/hid-cdc
-	:board: nrf52840_pca10056
+	:board: nrf52840dk_nrf52840
 	:goals: build
 	:compact:
 
@@ -87,4 +87,3 @@ Buttons have following functions:
 - Button 1 is a left HID mouse button
 - Button 2 types the string sent with CDC ACM 1 using HID keyboard
 - Button 3 is a CAPS LOCK on HID keyboard
-

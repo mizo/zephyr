@@ -45,7 +45,7 @@ void main(void)
 	}
 
 	while (1) {
-		if (pwm_pin_set_usec(pwm_dev, 0, PERIOD, pulse_width)) {
+		if (pwm_pin_set_usec(pwm_dev, 0, PERIOD, pulse_width, 0)) {
 			printk("pwm pin set fails\n");
 			return;
 		}
@@ -66,6 +66,6 @@ void main(void)
 			}
 		}
 
-		k_sleep(MSEC_PER_SEC);
+		k_sleep(K_SECONDS(1));
 	}
 }

@@ -16,7 +16,7 @@ void main(void)
 	struct sensor_value temp_value;
 	int ret;
 
-	dev = device_get_binding(DT_INST_0_TI_TMP116_LABEL);
+	dev = device_get_binding(DT_LABEL(DT_INST(0, ti_tmp116)));
 	__ASSERT(dev != NULL, "Failed to get TMP116 device binding");
 
 	printk("Device %s - %p is ready\n", dev->config->name, dev);
@@ -37,6 +37,6 @@ void main(void)
 
 		printk("temp is %d.%d oC\n", temp_value.val1, temp_value.val2);
 
-		k_sleep(1000);
+		k_sleep(K_MSEC(1000));
 	}
 }

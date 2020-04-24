@@ -31,7 +31,6 @@
  * @brief Test clock uptime APIs functionality
  *
  * @see k_uptime_get(), k_uptime_get_32(), k_uptime_delta()
- * k_uptime_delta_32()
  */
 void test_clock_uptime(void)
 {
@@ -66,19 +65,6 @@ void test_clock_uptime(void)
 		k_busy_wait(50);
 #endif
 	}
-
-	/**TESTPOINT: uptime delta lower 32-bit*/
-	k_uptime_delta_32(&d64);
-	while (k_uptime_delta_32(&d64) == 0) {
-#if defined(CONFIG_ARCH_POSIX)
-		k_busy_wait(50);
-#endif
-	}
-
-	/**TESTPOINT: uptime delta straddled ms boundary*/
-	k_uptime_delta_32(&d64);
-	ALIGN_MS_BOUNDARY;
-	zassert_true(k_uptime_delta_32(&d64) > 0, NULL);
 }
 
 /**
@@ -95,7 +81,7 @@ void test_clock_cycle(void)
 	c32 = k_cycle_get_32();
 	/*break if cycle counter wrap around*/
 	while (k_cycle_get_32() > c32 &&
-	       k_cycle_get_32() < (c32 + sys_clock_hw_cycles_per_tick())) {
+	       k_cycle_get_32() < (c32 + k_ticks_to_cyc_floor32(1))) {
 #if defined(CONFIG_ARCH_POSIX)
 		k_busy_wait(50);
 #endif
@@ -119,7 +105,7 @@ void test_clock_cycle(void)
 			     (sys_clock_hw_cycles_per_sec() / MSEC_PER_SEC),
 			     NULL);
 		/* delta NS should be greater than 1 milli-second */
-		zassert_true(SYS_CLOCK_HW_CYCLES_TO_NS(c1 - c0) >
+		zassert_true((u32_t)k_cyc_to_ns_floor64(c1 - c0) >
 			     (NSEC_PER_SEC / MSEC_PER_SEC), NULL);
 	}
 }

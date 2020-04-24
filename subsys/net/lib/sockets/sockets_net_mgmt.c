@@ -11,10 +11,10 @@
 LOG_MODULE_REGISTER(net_sock_mgmt, CONFIG_NET_SOCKETS_LOG_LEVEL);
 
 #include <kernel.h>
-#include <misc/util.h>
+#include <sys/util.h>
 #include <net/socket.h>
 #include <syscall_handler.h>
-#include <misc/fdtable.h>
+#include <sys/fdtable.h>
 #include <net/socket_net_mgmt.h>
 #include <net/ethernet_mgmt.h>
 
@@ -34,10 +34,10 @@ struct net_mgmt_socket {
 	u32_t mask;
 
 	/* Message allocation timeout */
-	s32_t alloc_timeout;
+	k_timeout_t alloc_timeout;
 
 	/* net_mgmt event timeout */
-	s32_t wait_timeout;
+	k_timeout_t wait_timeout;
 
 	/* Socket protocol */
 	int proto;
@@ -151,7 +151,7 @@ static ssize_t znet_mgmt_recvfrom(struct net_mgmt_socket *mgmt, void *buf,
 				  socklen_t *addrlen)
 {
 	struct sockaddr_nm *nm_addr = (struct sockaddr_nm *)src_addr;
-	s32_t timeout = mgmt->wait_timeout;
+	k_timeout_t timeout = mgmt->wait_timeout;
 	u32_t raised_event = 0;
 	u8_t *copy_to = buf;
 	struct net_mgmt_msghdr hdr;
@@ -190,7 +190,7 @@ again:
 	}
 
 	if ((mgmt->mask & raised_event) != raised_event) {
-		if (timeout == K_FOREVER) {
+		if (K_TIMEOUT_EQ(timeout, K_FOREVER)) {
 			goto again;
 		}
 

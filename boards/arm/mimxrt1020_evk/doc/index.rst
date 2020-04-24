@@ -82,6 +82,8 @@ features:
 +-----------+------------+-------------------------------------+
 | ENET      | on-chip    | ethernet                            |
 +-----------+------------+-------------------------------------+
+| USB       | on-chip    | USB device                          |
++-----------+------------+-------------------------------------+
 
 The default configuration can be found in the defconfig file:
 ``boards/arm/mimxrt1020_evk/mimxrt1020_evk_defconfig``
@@ -248,7 +250,7 @@ should see the following message in the terminal:
    https://www.nxp.com/support/developer-resources/run-time-software/i.mx-developer-resources/i.mx-rt1020-evaluation-kit:MIMXRT1020-EVK
 
 .. _MIMXRT1020-EVK User Guide:
-   https://www.nxp.com/docs/en/user-guide/MIMXRT1020EVKHUG.pdf
+   https://www.nxp.com/webapp/Download?colCode=MIMXRT1020EVKHUG
 
 .. _MIMXRT1020-EVK Design Files:
    https://www.nxp.com/webapp/Download?colCode=MIMXRT1020-EVK-Design-Files

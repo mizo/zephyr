@@ -32,13 +32,23 @@ enum bt_buf_type {
 	BT_BUF_ACL_OUT,
 	/** Incoming ACL data */
 	BT_BUF_ACL_IN,
+	/** H:4 data */
+	BT_BUF_H4,
 };
 
 /** Minimum amount of user data size for buffers passed to the stack. */
-#define BT_BUF_USER_DATA_MIN 8
+#define BT_BUF_USER_DATA_MIN __DEPRECATED_MACRO 4
+
+#if defined(CONFIG_BT_HCI_RAW)
+#define BT_BUF_RESERVE MAX(CONFIG_BT_HCI_RESERVE, CONFIG_BT_HCI_RAW_RESERVE)
+#else
+#define BT_BUF_RESERVE CONFIG_BT_HCI_RESERVE
+#endif
+
+#define BT_BUF_SIZE(size) (BT_BUF_RESERVE + (size))
 
 /** Data size neeed for HCI RX buffers */
-#define BT_BUF_RX_SIZE (CONFIG_BT_HCI_RESERVE + CONFIG_BT_RX_BUF_LEN)
+#define BT_BUF_RX_SIZE (BT_BUF_SIZE(CONFIG_BT_RX_BUF_LEN))
 
 /** Allocate a buffer for incoming data
  *
@@ -52,6 +62,22 @@ enum bt_buf_type {
  *  @return A new buffer.
  */
 struct net_buf *bt_buf_get_rx(enum bt_buf_type type, s32_t timeout);
+
+/** Allocate a buffer for outgoing data
+ *
+ *  This will set the buffer type so bt_buf_set_type() does not need to
+ *  be explicitly called before bt_send().
+ *
+ *  @param type    Type of buffer. Only BT_BUF_CMD, BT_BUF_ACL_OUT or
+ *                 BT_BUF_H4, when operating on H:4 mode, are allowed.
+ *  @param timeout Timeout in milliseconds, or one of the special values
+ *                 K_NO_WAIT and K_FOREVER.
+ *  @param data    Initial data to append to buffer.
+ *  @param size    Initial data size.
+ *  @return A new buffer.
+ */
+struct net_buf *bt_buf_get_tx(enum bt_buf_type type, s32_t timeout,
+			      const void *data, size_t size);
 
 /** Allocate a buffer for an HCI Command Complete/Status Event
  *

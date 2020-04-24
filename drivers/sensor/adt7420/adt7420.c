@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT adi_adt7420
+
 #include <device.h>
 #include <drivers/i2c.h>
 #include <sys/byteorder.h>
@@ -14,9 +16,8 @@
 
 #include "adt7420.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
 #include <logging/log.h>
-LOG_MODULE_REGISTER(ADT7420);
+LOG_MODULE_REGISTER(ADT7420, CONFIG_SENSOR_LOG_LEVEL);
 
 static int adt7420_temp_reg_read(struct device *dev, u8_t reg, s16_t *val)
 {
@@ -217,14 +218,15 @@ static int adt7420_init(struct device *dev)
 static struct adt7420_data adt7420_driver;
 
 static const struct adt7420_dev_config adt7420_config = {
-	.i2c_port = DT_INST_0_ADI_ADT7420_BUS_NAME,
-	.i2c_addr = DT_INST_0_ADI_ADT7420_BASE_ADDRESS,
+	.i2c_port = DT_INST_BUS_LABEL(0),
+	.i2c_addr = DT_INST_REG_ADDR(0),
 #ifdef CONFIG_ADT7420_TRIGGER
-	.gpio_port = DT_INST_0_ADI_ADT7420_INT_GPIOS_CONTROLLER,
-	.int_gpio = DT_INST_0_ADI_ADT7420_INT_GPIOS_PIN,
+	.int_pin = DT_INST_GPIO_PIN(0, int_gpios),
+	.int_flags = DT_INST_GPIO_FLAGS(0, int_gpios),
+	.int_name = DT_INST_GPIO_LABEL(0, int_gpios),
 #endif
 };
 
-DEVICE_AND_API_INIT(adt7420, DT_INST_0_ADI_ADT7420_LABEL, adt7420_init, &adt7420_driver,
+DEVICE_AND_API_INIT(adt7420, DT_INST_LABEL(0), adt7420_init, &adt7420_driver,
 		    &adt7420_config, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &adt7420_driver_api);

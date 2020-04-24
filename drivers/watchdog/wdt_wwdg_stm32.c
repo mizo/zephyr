@@ -4,14 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <watchdog.h>
+#define DT_DRV_COMPAT st_stm32_window_watchdog
+
+#include <drivers/watchdog.h>
 #include <soc.h>
 #include <errno.h>
 #include <assert.h>
-#include <clock_control/stm32_clock_control.h>
+#include <drivers/clock_control/stm32_clock_control.h>
 #include <drivers/clock_control.h>
 
 #include "wdt_wwdg_stm32.h"
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(wdt_wwdg_stm32);
 
 #define WWDG_INTERNAL_DIVIDER   4096U
 #define WWDG_RESET_LIMIT    WWDG_COUNTER_MIN
@@ -66,8 +71,11 @@ static u32_t wwdg_stm32_get_pclk(struct device *dev)
 
 	__ASSERT_NO_MSG(clk);
 
-	clock_control_get_rate(clk, (clock_control_subsys_t *) &cfg->pclken,
-			       &pclk_rate);
+	if (clock_control_get_rate(clk, (clock_control_subsys_t *) &cfg->pclken,
+			       &pclk_rate) < 0) {
+		LOG_ERR("Failed call clock_control_get_rate");
+		return -EIO;
+	}
 
 	return pclk_rate;
 }
@@ -84,7 +92,7 @@ static u32_t wwdg_stm32_get_timeout(struct device *dev, u32_t prescaler,
 				    u32_t counter)
 {
 	u32_t divider = WWDG_INTERNAL_DIVIDER * (1 << (prescaler >> 7));
-	float f_wwdg = wwdg_stm32_get_pclk(dev) / divider;
+	float f_wwdg = (float)wwdg_stm32_get_pclk(dev) / divider;
 
 	return USEC_PER_SEC * (((counter & 0x3F) + 1) / f_wwdg);
 }
@@ -144,6 +152,9 @@ static int wwdg_stm32_setup(struct device *dev, u8_t options)
 	if (options & WDT_OPT_PAUSE_IN_SLEEP) {
 		return -ENOTSUP;
 	}
+
+	/* Ensure that Early Wakeup Interrupt Flag is cleared */
+	LL_WWDG_ClearFlag_EWKUP(wwdg);
 
 	/* Enable the WWDG */
 	LL_WWDG_Enable(wwdg);
@@ -250,13 +261,13 @@ static struct wwdg_stm32_data wwdg_stm32_dev_data = {
 
 static struct wwdg_stm32_config wwdg_stm32_dev_config = {
 	.pclken = {
-		.enr = DT_WWDT_0_CLOCK_BITS,
-		.bus = DT_WWDT_0_CLOCK_BUS
+		.enr = DT_INST_CLOCKS_CELL(0, bits),
+		.bus = DT_INST_CLOCKS_CELL(0, bus)
 	},
-	.Instance = (WWDG_TypeDef *)DT_WWDT_0_BASE_ADDRESS,
+	.Instance = (WWDG_TypeDef *)DT_INST_REG_ADDR(0),
 };
 
-DEVICE_AND_API_INIT(wwdg_stm32, DT_WWDT_0_NAME,
+DEVICE_AND_API_INIT(wwdg_stm32, DT_INST_LABEL(0),
 		    wwdg_stm32_init, &wwdg_stm32_dev_data, &wwdg_stm32_dev_config,
 		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 		    &wwdg_stm32_api);
@@ -265,8 +276,9 @@ static void wwdg_stm32_irq_config(struct device *dev)
 {
 	WWDG_TypeDef *wwdg = WWDG_STM32_STRUCT(dev);
 
-	IRQ_CONNECT(DT_WWDT_0_IRQ, DT_WWDT_0_IRQ_PRI,
+	IRQ_CONNECT(DT_INST_IRQN(0),
+		    DT_INST_IRQ(0, priority),
 		    wwdg_stm32_isr, DEVICE_GET(wwdg_stm32), 0);
-	irq_enable(DT_WWDT_0_IRQ);
+	irq_enable(DT_INST_IRQN(0));
 	LL_WWDG_EnableIT_EWKUP(wwdg);
 }

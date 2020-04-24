@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT smsc_lan9220
+
 /* SMSC911x/SMSC9220 driver. Partly based on mbedOS driver. */
 
 #define LOG_MODULE_NAME eth_smsc911x
@@ -106,7 +108,7 @@ int smsc_phy_regread(u8_t regoffset, u32_t *data)
 
 	val = 0U;
 	do {
-		k_sleep(1);
+		k_sleep(K_MSEC(1));
 		time_out--;
 		if (smsc_mac_regread(SMSC9220_MAC_MII_ACC, &val)) {
 			return -1;
@@ -152,7 +154,7 @@ int smsc_phy_regwrite(u8_t regoffset, u32_t data)
 	}
 
 	do {
-		k_sleep(1);
+		k_sleep(K_MSEC(1));
 		time_out--;
 		if (smsc_mac_regread(SMSC9220_MAC_MII_ACC, &phycmd)) {
 			return -1;
@@ -222,7 +224,7 @@ static int smsc_soft_reset(void)
 	SMSC9220->HW_CFG |= HW_CFG_SRST;
 
 	do {
-		k_sleep(1);
+		k_sleep(K_MSEC(1));
 		time_out--;
 	} while (time_out != 0U && (SMSC9220->HW_CFG & HW_CFG_SRST));
 
@@ -402,7 +404,7 @@ int smsc_init(void)
 	SMSC9220->FIFO_INT &= ~(0xFF);  /* Clear 2 bottom nibbles */
 
 	/* This sleep is compulsory otherwise txmit/receive will fail. */
-	k_sleep(2000);
+	k_sleep(K_MSEC(2000));
 
 	return 0;
 }
@@ -659,8 +661,8 @@ static struct device DEVICE_NAME_GET(eth_smsc911x_0);
 
 int eth_init(struct device *dev)
 {
-	IRQ_CONNECT(DT_INST_0_SMSC_LAN9220_IRQ_0,
-		    DT_INST_0_SMSC_LAN9220_IRQ_0_PRIORITY,
+	IRQ_CONNECT(DT_INST_IRQN(0),
+		    DT_INST_IRQ(0, priority),
 		    eth_smsc911x_isr, DEVICE_GET(eth_smsc911x_0), 0);
 
 	int ret = smsc_init();
@@ -670,7 +672,7 @@ int eth_init(struct device *dev)
 		return -ENODEV;
 	}
 
-	irq_enable(DT_INST_0_SMSC_LAN9220_IRQ_0);
+	irq_enable(DT_INST_IRQN(0));
 
 	return ret;
 }
@@ -678,6 +680,6 @@ int eth_init(struct device *dev)
 static struct eth_context eth_0_context;
 
 ETH_NET_DEVICE_INIT(eth_smsc911x_0, "smsc911x_0",
-		eth_init, &eth_0_context,
+		eth_init, device_pm_control_nop, &eth_0_context,
 		NULL /*&eth_config_0*/, CONFIG_ETH_INIT_PRIORITY, &api_funcs,
 		NET_ETH_MTU /*MTU*/);

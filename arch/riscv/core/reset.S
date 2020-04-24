@@ -5,7 +5,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <kernel_structs.h>
+#include <toolchain.h>
+#include <linker/sections.h>
+#include <arch/cpu.h>
 
 /* exports */
 GTEXT(__initialize)
@@ -44,13 +46,27 @@ loop_slave_core:
 
 boot_master_core:
 
+#ifdef CONFIG_FLOAT
+	/*
+	 * Enable floating-point.
+	 */
+	li  t0, MSTATUS_FS_INIT
+	csrrs x0, mstatus, t0
+
+	/*
+	 * Floating-point rounding mode set to IEEE-754 default, and clear
+	 * all exception flags.
+	 */
+	fscsr x0, x0
+#endif
+
 #ifdef CONFIG_INIT_STACKS
-	/* Pre-populate all bytes in _interrupt_stack with 0xAA */
-	la t0, _interrupt_stack
+	/* Pre-populate all bytes in z_interrupt_stacks with 0xAA */
+	la t0, z_interrupt_stacks
 	li t1, CONFIG_ISR_STACK_SIZE
 	add t1, t1, t0
 
-	/* Populate _interrupt_stack with 0xaaaaaaaa */
+	/* Populate z_interrupt_stacks with 0xaaaaaaaa */
 	li t2, 0xaaaaaaaa
 aa_loop:
 	sw t2, 0x00(t0)
@@ -60,9 +76,9 @@ aa_loop:
 
 	/*
 	 * Initially, setup stack pointer to
-	 * _interrupt_stack + CONFIG_ISR_STACK_SIZE
+	 * z_interrupt_stacks + CONFIG_ISR_STACK_SIZE
 	 */
-	la sp, _interrupt_stack
+	la sp, z_interrupt_stacks
 	li t0, CONFIG_ISR_STACK_SIZE
 	add sp, sp, t0
 

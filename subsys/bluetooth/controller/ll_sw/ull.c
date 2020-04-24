@@ -32,6 +32,7 @@
 #include "pdu.h"
 #include "ll.h"
 #include "ll_feat.h"
+#include "ll_settings.h"
 #include "lll.h"
 #include "lll_adv.h"
 #include "lll_scan.h"
@@ -50,7 +51,8 @@
 #include "ull_vendor.h"
 #endif /* CONFIG_BT_CTLR_USER_EXT */
 
-#define LOG_MODULE_NAME bt_ctlr_llsw_ull
+#define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
+#define LOG_MODULE_NAME bt_ctlr_ull
 #include "common/log.h"
 #include "hal/debug.h"
 
@@ -146,8 +148,13 @@ static struct {
 	u8_t pool[sizeof(memq_link_t) * EVENT_DONE_MAX];
 } mem_link_done;
 
+#if defined(CONFIG_BT_CTLR_PHY) && defined(CONFIG_BT_CTLR_DATA_LENGTH)
+#define LL_PDU_RX_CNT 3
+#else
+#define LL_PDU_RX_CNT 2
+#endif
+
 #define PDU_RX_CNT    (CONFIG_BT_CTLR_RX_BUFFERS + 3)
-#define LL_PDU_RX_CNT 1
 #define RX_CNT        (PDU_RX_CNT + LL_PDU_RX_CNT)
 
 static MFIFO_DEFINE(pdu_rx_free, sizeof(void *), PDU_RX_CNT);
@@ -218,6 +225,7 @@ static void *mark_update;
 static void *mark_disable;
 
 static inline int init_reset(void);
+static void perform_lll_reset(void *param);
 static inline void *mark_set(void **m, void *param);
 static inline void *mark_unset(void **m, void *param);
 static inline void *mark_get(void *m);
@@ -397,6 +405,40 @@ void ll_reset(void)
 	MFIFO_INIT(ll_pdu_rx_free);
 #endif /* CONFIG_BT_CONN */
 
+	/* Reset LLL via mayfly */
+	{
+		static memq_link_t link;
+		static struct mayfly mfy = {0, 0, &link, NULL,
+					    perform_lll_reset};
+		u32_t retval;
+
+		/* NOTE: If Zero Latency Interrupt is used, then LLL context
+		 *       will be the highest priority IRQ in the system, hence
+		 *       mayfly_enqueue will be done running the callee inline
+		 *       (vector to the callee function) in this function. Else
+		 *       we use semaphore to wait for perform_lll_reset to
+		 *       complete.
+		 */
+
+#if !defined(CONFIG_BT_CTLR_ZLI)
+		struct k_sem sem;
+
+		k_sem_init(&sem, 0, 1);
+		mfy.param = &sem;
+#endif /* !CONFIG_BT_CTLR_ZLI */
+
+		retval = mayfly_enqueue(TICKER_USER_ID_THREAD,
+					TICKER_USER_ID_LLL, 0, &mfy);
+		LL_ASSERT(!retval);
+
+#if !defined(CONFIG_BT_CTLR_ZLI)
+		/* LLL reset must complete before returning - wait for
+		 * reset completion in LLL mayfly thread
+		 */
+		k_sem_take(&sem, K_FOREVER);
+#endif /* !CONFIG_BT_CTLR_ZLI */
+	}
+
 	/* Common to init and reset */
 	err = init_reset();
 	LL_ASSERT(!err);
@@ -507,6 +549,7 @@ void ll_rx_dequeue(void)
 
 				conn_lll = lll->conn;
 				LL_ASSERT(conn_lll);
+				lll->conn = NULL;
 
 				LL_ASSERT(!conn_lll->link_tx_free);
 				link = memq_deinit(&conn_lll->memq_tx.head,
@@ -516,8 +559,6 @@ void ll_rx_dequeue(void)
 
 				conn = (void *)HDR_LLL2EVT(conn_lll);
 				ll_conn_release(conn);
-
-				lll->conn = NULL;
 			} else {
 				/* Release un-utilized node rx */
 				if (adv->node_rx_cc_free) {
@@ -526,7 +567,7 @@ void ll_rx_dequeue(void)
 					rx_free = adv->node_rx_cc_free;
 					adv->node_rx_cc_free = NULL;
 
-					ll_rx_release(rx_free);
+					mem_release(rx_free, &mem_pdu_rx.free);
 				}
 			}
 
@@ -665,22 +706,31 @@ void ll_rx_mem_release(void **node_rx)
 		switch (rx_free->type) {
 #if defined(CONFIG_BT_CONN)
 		case NODE_RX_TYPE_CONNECTION:
-#if defined(CONFIG_BT_CENTRAL)
 		{
-			struct node_rx_pdu *rx = (void *)rx_free;
+			struct node_rx_cc *cc =
+				(void *)((struct node_rx_pdu *)rx_free)->pdu;
 
-			if (*((u8_t *)rx->pdu) ==
-			    BT_HCI_ERR_UNKNOWN_CONN_ID) {
+			if (0) {
+
+#if defined(CONFIG_BT_PERIPHERAL)
+			} else if (cc->status == BT_HCI_ERR_ADV_TIMEOUT) {
+				mem_release(rx_free, &mem_pdu_rx.free);
+
+				break;
+#endif /* !CONFIG_BT_PERIPHERAL */
+
+#if defined(CONFIG_BT_CENTRAL)
+			} else if (cc->status == BT_HCI_ERR_UNKNOWN_CONN_ID) {
+				struct node_rx_ftr *ftr = &rx_free->rx_ftr;
+				struct ll_scan_set *scan =
+					(void *)HDR_LLL2EVT(ftr->param);
 				struct lll_conn *conn_lll;
-				struct ll_scan_set *scan;
 				struct ll_conn *conn;
 				memq_link_t *link;
 
-				scan = ull_scan_is_enabled_get(0);
-				LL_ASSERT(scan);
-
 				conn_lll = scan->lll.conn;
 				LL_ASSERT(conn_lll);
+				scan->lll.conn = NULL;
 
 				LL_ASSERT(!conn_lll->link_tx_free);
 				link = memq_deinit(&conn_lll->memq_tx.head,
@@ -693,20 +743,22 @@ void ll_rx_mem_release(void **node_rx)
 
 				scan->is_enabled = 0U;
 
-				scan->lll.conn = NULL;
-
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 #if defined(CONFIG_BT_BROADCASTER)
 				if (!ull_adv_is_enabled_get(0))
-#endif
+#endif /* CONFIG_BT_BROADCASTER */
 				{
 					ull_filter_adv_scan_state_cb(0);
 				}
-#endif
+#endif /* CONFIG_BT_CTLR_PRIVACY */
 				break;
+#endif /* CONFIG_BT_CENTRAL */
+
+			} else {
+				LL_ASSERT(!cc->status);
 			}
 		}
-#endif /* CONFIG_BT_CENTRAL */
+
 		/* passthrough */
 		case NODE_RX_TYPE_DC_PDU:
 #endif /* CONFIG_BT_CONN */
@@ -971,13 +1023,18 @@ int ull_disable(void *lll)
 	u32_t ret;
 
 	hdr = HDR_ULL(((struct lll_hdr *)lll)->parent);
-	if (!hdr || !hdr->ref) {
+	if (!hdr) {
 		return ULL_STATUS_SUCCESS;
 	}
 
 	k_sem_init(&sem, 0, 1);
+
 	hdr->disabled_param = &sem;
 	hdr->disabled_cb = disabled_cb;
+
+	if (!hdr->ref) {
+		return ULL_STATUS_SUCCESS;
+	}
 
 	mfy.param = lll;
 	ret = mayfly_enqueue(TICKER_USER_ID_THREAD, TICKER_USER_ID_LLL, 0,
@@ -1158,6 +1215,37 @@ static inline int init_reset(void)
 	return 0;
 }
 
+static void perform_lll_reset(void *param)
+{
+	int err;
+
+	/* Reset LLL */
+	err = lll_reset();
+	LL_ASSERT(!err);
+
+#if defined(CONFIG_BT_BROADCASTER)
+	/* Reset adv state */
+	err = lll_adv_reset();
+	LL_ASSERT(!err);
+#endif /* CONFIG_BT_BROADCASTER */
+
+#if defined(CONFIG_BT_OBSERVER)
+	/* Reset scan state */
+	err = lll_scan_reset();
+	LL_ASSERT(!err);
+#endif /* CONFIG_BT_OBSERVER */
+
+#if defined(CONFIG_BT_CONN)
+	/* Reset conn role */
+	err = lll_conn_reset();
+	LL_ASSERT(!err);
+#endif /* CONFIG_BT_CONN */
+
+#if !defined(CONFIG_BT_CTLR_ZLI)
+	k_sem_give(param);
+#endif /* !CONFIG_BT_CTLR_ZLI */
+}
+
 static inline void *mark_set(void **m, void *param)
 {
 	if (!*m) {
@@ -1249,6 +1337,7 @@ static inline void rx_alloc(u8_t max)
 			break;
 		}
 
+		link->mem = NULL;
 		rx->link = link;
 
 		MFIFO_BY_IDX_ENQUEUE(ll_pdu_rx_free, idx, rx);

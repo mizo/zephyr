@@ -110,7 +110,7 @@ void cpu1_fn(void *p1, void *p2, void *p3)
  *
  * @ingroup kernel_spinlock_tests
  *
- * @see z_arch_start_cpu()
+ * @see arch_start_cpu()
  */
 void test_spinlock_bounce(void)
 {
@@ -118,7 +118,7 @@ void test_spinlock_bounce(void)
 
 	k_thread_create(&cpu1_thread, cpu1_stack, CPU1_STACK_SIZE,
 			cpu1_fn, NULL, NULL, NULL,
-			0, 0, 0);
+			0, 0, K_NO_WAIT);
 
 	k_busy_wait(10);
 

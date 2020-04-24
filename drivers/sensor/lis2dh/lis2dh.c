@@ -4,88 +4,52 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT st_lis2dh
+
 
 #include <init.h>
 #include <sys/byteorder.h>
 #include <sys/__assert.h>
 #include <logging/log.h>
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_REGISTER(lis2dh);
+LOG_MODULE_REGISTER(lis2dh, CONFIG_SENSOR_LOG_LEVEL);
 #include "lis2dh.h"
 
-#if defined(DT_ST_LIS2DH_BUS_SPI)
-int lis2dh_spi_access(struct lis2dh_data *ctx, u8_t cmd,
-		      void *data, size_t length)
-{
-	const struct spi_buf buf[2] = {
-		{
-			.buf = &cmd,
-			.len = 1
-		},
-		{
-			.buf = data,
-			.len = length
-		}
-	};
-	const struct spi_buf_set tx = {
-		.buffers = buf,
-		.count = 2
-	};
+#define ACCEL_SCALE(sensitivity)			\
+	((SENSOR_G * (sensitivity) >> 14) / 100)
 
-	if (cmd & LIS2DH_SPI_READ_BIT) {
-		const struct spi_buf_set rx = {
-			.buffers = buf,
-			.count = 2
-		};
-
-		return spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx);
-	}
-
-	return spi_write(ctx->spi, &ctx->spi_cfg, &tx);
-}
+/*
+ * Use values for low-power mode in DS "Mechanical (Sensor) characteristics",
+ * multiplied by 100.
+ */
+static const u32_t lis2dh_reg_val_to_scale[] = {
+#if DT_HAS_NODE(DT_INST(0, st_lsm303agr_accel))
+	ACCEL_SCALE(1563),
+	ACCEL_SCALE(3126),
+	ACCEL_SCALE(6252),
+	ACCEL_SCALE(18758),
+#else
+	ACCEL_SCALE(1600),
+	ACCEL_SCALE(3200),
+	ACCEL_SCALE(6400),
+	ACCEL_SCALE(19200),
 #endif
+};
 
-#if defined(CONFIG_LIS2DH_TRIGGER) || defined(CONFIG_LIS2DH_ACCEL_RANGE_RUNTIME)
-int lis2dh_reg_field_update(struct device *dev, u8_t reg_addr,
-			    u8_t pos, u8_t mask, u8_t val)
-{
-	int status;
-	u8_t old_val;
-
-	/* just to remove gcc warning */
-	old_val = 0U;
-
-	status = lis2dh_reg_read_byte(dev, reg_addr, &old_val);
-	if (status < 0) {
-		return status;
-	}
-
-	return lis2dh_reg_write_byte(dev, reg_addr,
-				     (old_val & ~mask) | ((val << pos) & mask));
-}
-#endif
-
-static void lis2dh_convert(s16_t raw_val, u16_t scale,
+static void lis2dh_convert(s16_t raw_val, u32_t scale,
 			   struct sensor_value *val)
 {
 	s32_t converted_val;
 
 	/*
 	 * maximum converted value we can get is: max(raw_val) * max(scale)
-	 *	max(raw_val) = +/- 2^15
-	 *	max(scale) = 4785
-	 *	max(converted_val) = 156794880 which is less than 2^31
+	 *	max(raw_val >> 4) = +/- 2^11
+	 *	max(scale) = 114921
+	 *	max(converted_val) = 235358208 which is less than 2^31
 	 */
-	converted_val = raw_val * scale;
+	converted_val = (raw_val >> 4) * scale;
 	val->val1 = converted_val / 1000000;
 	val->val2 = converted_val % 1000000;
-
-	/* normalize val to make sure val->val2 is positive */
-	if (val->val2 < 0) {
-		val->val1 -= 1;
-		val->val2 += 1000000;
-	}
 }
 
 static int lis2dh_channel_get(struct device *dev,
@@ -134,9 +98,9 @@ static int lis2dh_sample_fetch(struct device *dev, enum sensor_channel chan)
 	 * since status and all accel data register addresses are consecutive,
 	 * a burst read can be used to read all the samples
 	 */
-	status = lis2dh_burst_read(dev, LIS2DH_REG_STATUS,
-				   lis2dh->sample.raw,
-				   sizeof(lis2dh->sample.raw));
+	status = lis2dh->hw_tf->read_data(dev, LIS2DH_REG_STATUS,
+					  lis2dh->sample.raw,
+					  sizeof(lis2dh->sample.raw));
 	if (status < 0) {
 		LOG_WRN("Could not read accel axis data");
 		return status;
@@ -144,18 +108,12 @@ static int lis2dh_sample_fetch(struct device *dev, enum sensor_channel chan)
 
 	for (i = 0; i < (3 * sizeof(s16_t)); i += sizeof(s16_t)) {
 		s16_t *sample =
-			(s16_t *)&lis2dh->sample.raw[LIS2DH_DATA_OFS + 1 + i];
+			(s16_t *)&lis2dh->sample.raw[1 + i];
 
 		*sample = sys_le16_to_cpu(*sample);
 	}
 
-	LOG_INF("status=0x%x x=%d y=%d z=%d", lis2dh->sample.status,
-		    lis2dh->sample.xyz[0], lis2dh->sample.xyz[1],
-		    lis2dh->sample.xyz[2]);
-
-	if (lis2dh->sample.status & LIS2DH_STATUS_OVR_MASK) {
-		return -EBADMSG;
-	} else if (lis2dh->sample.status & LIS2DH_STATUS_DRDY_MASK) {
+	if (lis2dh->sample.status & LIS2DH_STATUS_DRDY_MASK) {
 		return 0;
 	}
 
@@ -190,13 +148,14 @@ static int lis2dh_acc_odr_set(struct device *dev, u16_t freq)
 	int odr;
 	int status;
 	u8_t value;
+	struct lis2dh_data *data = dev->driver_data;
 
 	odr = lis2dh_freq_to_odr_val(freq);
 	if (odr < 0) {
 		return odr;
 	}
 
-	status = lis2dh_reg_read_byte(dev, LIS2DH_REG_CTRL1, &value);
+	status = data->hw_tf->read_reg(dev, LIS2DH_REG_CTRL1, &value);
 	if (status < 0) {
 		return status;
 	}
@@ -212,27 +171,23 @@ static int lis2dh_acc_odr_set(struct device *dev, u16_t freq)
 		odr--;
 	}
 
-	return lis2dh_reg_write_byte(dev, LIS2DH_REG_CTRL1,
-				  (value & ~LIS2DH_ODR_MASK) |
-				  LIS2DH_ODR_RATE(odr));
+	return data->hw_tf->write_reg(dev, LIS2DH_REG_CTRL1,
+				      (value & ~LIS2DH_ODR_MASK) |
+				      LIS2DH_ODR_RATE(odr));
 }
 #endif
 
 #ifdef CONFIG_LIS2DH_ACCEL_RANGE_RUNTIME
-static const union {
-	u32_t word_le32;
-	u8_t fs_values[4];
-} lis2dh_acc_range_map = { .fs_values = {2, 4, 8, 16} };
+
+#define LIS2DH_RANGE_IDX_TO_VALUE(idx)		(1 << ((idx) + 1))
+#define LIS2DH_NUM_RANGES			4
 
 static int lis2dh_range_to_reg_val(u16_t range)
 {
 	int i;
-	u32_t range_map;
 
-	range_map = sys_le32_to_cpu(lis2dh_acc_range_map.word_le32);
-
-	for (i = 0; range_map; i++, range_map >>= 1) {
-		if (range == (range_map & 0xff)) {
+	for (i = 0; i < LIS2DH_NUM_RANGES; i++) {
+		if (range == LIS2DH_RANGE_IDX_TO_VALUE(i)) {
 			return i;
 		}
 	}
@@ -250,12 +205,11 @@ static int lis2dh_acc_range_set(struct device *dev, s32_t range)
 		return fs;
 	}
 
-	lis2dh->scale = LIS2DH_ACCEL_SCALE(range);
+	lis2dh->scale = lis2dh_reg_val_to_scale[fs];
 
-	return lis2dh_reg_field_update(dev, LIS2DH_REG_CTRL4,
-				       LIS2DH_FS_SHIFT,
-				       LIS2DH_FS_MASK,
-				       fs);
+	return lis2dh->hw_tf->update_reg(dev, LIS2DH_REG_CTRL4,
+					 LIS2DH_FS_MASK,
+					 (fs << LIS2DH_FS_SHIFT));
 }
 #endif
 
@@ -315,12 +269,38 @@ static const struct sensor_driver_api lis2dh_driver_api = {
 int lis2dh_init(struct device *dev)
 {
 	struct lis2dh_data *lis2dh = dev->driver_data;
+	const struct lis2dh_config *cfg = dev->config->config_info;
 	int status;
-	u8_t raw[LIS2DH_DATA_OFS + 6];
+	u8_t id;
+	u8_t raw[6];
 
-	status = lis2dh_bus_configure(dev);
+	lis2dh->bus = device_get_binding(cfg->bus_name);
+	if (!lis2dh->bus) {
+		LOG_ERR("master not found: %s", cfg->bus_name);
+		return -EINVAL;
+	}
+
+	cfg->bus_init(dev);
+
+	status = lis2dh->hw_tf->read_reg(dev, LIS2DH_REG_WAI, &id);
 	if (status < 0) {
+		LOG_ERR("Failed to read chip id.");
 		return status;
+	}
+
+	if (id != LIS2DH_CHIP_ID) {
+		LOG_ERR("Invalid chip ID: %02x\n", id);
+		return -EINVAL;
+	}
+
+	if (IS_ENABLED(DT_INST_PROP(0, disconnect_sdo_sa0_pull_up))) {
+		status = lis2dh->hw_tf->update_reg(dev, LIS2DH_REG_CTRL0,
+						   LIS2DH_SDO_PU_DISC_MASK,
+						   LIS2DH_SDO_PU_DISC_MASK);
+		if (status < 0) {
+			LOG_ERR("Failed to disconnect SDO/SA0 pull-up.");
+			return status;
+		}
 	}
 
 	/* Initialize control register ctrl1 to ctrl 6 to default boot values
@@ -329,19 +309,20 @@ int lis2dh_init(struct device *dev)
 	 * Default values see LIS2DH documentation page 30, chapter 6.
 	 */
 	(void)memset(raw, 0, sizeof(raw));
-	raw[LIS2DH_DATA_OFS] = LIS2DH_ACCEL_EN_BITS;
+	raw[0] = LIS2DH_ACCEL_EN_BITS;
 
-	status = lis2dh_burst_write(dev, LIS2DH_REG_CTRL1, raw,
-				    sizeof(raw));
+	status = lis2dh->hw_tf->write_data(dev, LIS2DH_REG_CTRL1, raw,
+					   sizeof(raw));
+
 	if (status < 0) {
 		LOG_ERR("Failed to reset ctrl registers.");
 		return status;
 	}
 
 	/* set full scale range and store it for later conversion */
-	lis2dh->scale = LIS2DH_ACCEL_SCALE(1 << (LIS2DH_FS_IDX + 1));
-	status = lis2dh_reg_write_byte(dev, LIS2DH_REG_CTRL4,
-				       LIS2DH_FS_BITS | LIS2DH_HR_BIT);
+	lis2dh->scale = lis2dh_reg_val_to_scale[LIS2DH_FS_IDX];
+	status = lis2dh->hw_tf->write_reg(dev, LIS2DH_REG_CTRL4,
+					  LIS2DH_FS_BITS | LIS2DH_HR_BIT);
 	if (status < 0) {
 		LOG_ERR("Failed to set full scale ctrl register.");
 		return status;
@@ -360,13 +341,37 @@ int lis2dh_init(struct device *dev)
 		    LIS2DH_ODR_IDX, (u8_t)LIS2DH_LP_EN_BIT, lis2dh->scale);
 
 	/* enable accel measurements and set power mode and data rate */
-	return lis2dh_reg_write_byte(dev, LIS2DH_REG_CTRL1,
-				     LIS2DH_ACCEL_EN_BITS | LIS2DH_LP_EN_BIT |
-				     LIS2DH_ODR_BITS);
+	return lis2dh->hw_tf->write_reg(dev, LIS2DH_REG_CTRL1,
+					LIS2DH_ACCEL_EN_BITS | LIS2DH_LP_EN_BIT |
+					LIS2DH_ODR_BITS);
 }
 
-static struct lis2dh_data lis2dh_driver;
+static struct lis2dh_data lis2dh_data;
 
-DEVICE_AND_API_INIT(lis2dh, DT_INST_0_ST_LIS2DH_LABEL, lis2dh_init, &lis2dh_driver,
-		    NULL, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
+static const struct lis2dh_config lis2dh_config = {
+	.bus_name = DT_INST_BUS_LABEL(0),
+#if DT_ANY_INST_ON_BUS(spi)
+	.bus_init = lis2dh_spi_init,
+	.spi_conf.frequency = DT_INST_PROP(0, spi_max_frequency),
+	.spi_conf.operation = (SPI_OP_MODE_MASTER | SPI_MODE_CPOL |
+			       SPI_MODE_CPHA | SPI_WORD_SET(8) |
+			       SPI_LINES_SINGLE),
+	.spi_conf.slave     = DT_INST_REG_ADDR(0),
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
+	.gpio_cs_port	    = DT_INST_SPI_DEV_CS_GPIOS_LABEL(0),
+	.cs_gpio	    = DT_INST_SPI_DEV_CS_GPIOS_PIN(0),
+	.spi_conf.cs        =  &lis2dh_data.cs_ctrl,
+#else
+	.spi_conf.cs        = NULL,
+#endif
+#elif DT_ANY_INST_ON_BUS(i2c)
+	.bus_init = lis2dh_i2c_init,
+	.i2c_slv_addr = DT_INST_REG_ADDR(0),
+#else
+#error "BUS MACRO NOT DEFINED IN DTS"
+#endif
+};
+
+DEVICE_AND_API_INIT(lis2dh, DT_INST_LABEL(0), lis2dh_init, &lis2dh_data,
+		    &lis2dh_config, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &lis2dh_driver_api);

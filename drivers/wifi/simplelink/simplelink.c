@@ -235,7 +235,7 @@ static void simplelink_iface_init(struct net_if *iface)
 
 #ifdef CONFIG_NET_SOCKETS_OFFLOAD
 	/* Direct socket offload: */
-	socket_offload_register(&simplelink_ops);
+	socket_offload_dns_register(&simplelink_dns_ops);
 	simplelink_sockets_init();
 #endif
 
@@ -262,6 +262,7 @@ static int simplelink_init(struct device *dev)
 }
 
 NET_DEVICE_OFFLOAD_INIT(simplelink, CONFIG_WIFI_SIMPLELINK_NAME,
-			simplelink_init, &simplelink_data, NULL,
+			simplelink_init, device_pm_control_nop,
+			&simplelink_data, NULL,
 			CONFIG_WIFI_INIT_PRIORITY, &simplelink_api,
 			CONFIG_WIFI_SIMPLELINK_MAX_PACKET_SIZE);

@@ -33,10 +33,8 @@ volatile int cpu_running;
  * @{
  * @}
  */
-void cpu1_fn(int key, void *arg)
+FUNC_NORETURN void cpu1_fn(void *arg)
 {
-	ARG_UNUSED(key);
-
 	zassert_true(arg == &cpu_arg && *(int *)arg == 12345, "wrong arg");
 
 	cpu_running = 1;
@@ -50,13 +48,13 @@ void cpu1_fn(int key, void *arg)
  *
  * @ingroup kernel_mp_tests
  *
- * @see z_arch_start_cpu()
+ * @see arch_start_cpu()
  */
 void test_mp_start(void)
 {
 	cpu_arg = 12345;
 
-	z_arch_start_cpu(1, cpu1_stack, CPU1_STACK_SIZE, cpu1_fn, &cpu_arg);
+	arch_start_cpu(1, cpu1_stack, CPU1_STACK_SIZE, cpu1_fn, &cpu_arg);
 
 	while (!cpu_running) {
 	}

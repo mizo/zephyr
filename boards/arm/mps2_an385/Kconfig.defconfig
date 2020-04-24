@@ -1,8 +1,5 @@
-#
 # Copyright (c) 2017 Linaro Limited
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 if BOARD_MPS2_AN385
 
@@ -12,18 +9,6 @@ config BOARD
 if GPIO
 
 config GPIO_CMSDK_AHB
-	default y
-
-config GPIO_CMSDK_AHB_PORT0
-	default y
-
-config GPIO_CMSDK_AHB_PORT1
-	default y
-
-config GPIO_CMSDK_AHB_PORT2
-	default y
-
-config GPIO_CMSDK_AHB_PORT3
 	default y
 
 endif # GPIO
@@ -38,12 +23,9 @@ config UART_INTERRUPT_DRIVEN
 
 endif # SERIAL
 
-if WATCHDOG
-
 config WDOG_CMSDK_APB
 	default y
-
-endif # WATCHDOG
+	depends on WATCHDOG
 
 if COUNTER
 
@@ -55,11 +37,11 @@ config TIMER_DTMR_CMSDK_APB
 
 endif # COUNTER
 
-if I2C
-
 config I2C_SBCON
 	default y
+	depends on I2C
 
-endif # I2C
+config ZTEST_STACKSIZE
+	default 4096 if ZTEST
 
 endif

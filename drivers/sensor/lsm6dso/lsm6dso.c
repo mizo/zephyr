@@ -8,7 +8,9 @@
  * https://www.st.com/resource/en/datasheet/lsm6dso.pdf
  */
 
-#include <sensor.h>
+#define DT_DRV_COMPAT st_lsm6dso
+
+#include <drivers/sensor.h>
 #include <kernel.h>
 #include <device.h>
 #include <init.h>
@@ -19,8 +21,7 @@
 
 #include "lsm6dso.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_REGISTER(LSM6DSO);
+LOG_MODULE_REGISTER(LSM6DSO, CONFIG_SENSOR_LOG_LEVEL);
 
 static const u16_t lsm6dso_odr_map[] = {0, 12, 26, 52, 104, 208, 416, 833,
 					1660, 3330, 6660};
@@ -297,7 +298,7 @@ static int lsm6dso_attr_set(struct device *dev, enum sensor_channel chan,
 static int lsm6dso_sample_fetch_accel(struct device *dev)
 {
 	struct lsm6dso_data *data = dev->driver_data;
-	axis3bit16_t buf;
+	union axis3bit16_t buf;
 
 	if (lsm6dso_acceleration_raw_get(data->ctx, buf.u8bit) < 0) {
 		LOG_DBG("Failed to read sample");
@@ -314,7 +315,7 @@ static int lsm6dso_sample_fetch_accel(struct device *dev)
 static int lsm6dso_sample_fetch_gyro(struct device *dev)
 {
 	struct lsm6dso_data *data = dev->driver_data;
-	axis3bit16_t buf;
+	union axis3bit16_t buf;
 
 	if (lsm6dso_angular_rate_raw_get(data->ctx, buf.u8bit) < 0) {
 		LOG_DBG("Failed to read sample");
@@ -332,7 +333,7 @@ static int lsm6dso_sample_fetch_gyro(struct device *dev)
 static int lsm6dso_sample_fetch_temp(struct device *dev)
 {
 	struct lsm6dso_data *data = dev->driver_data;
-	axis1bit16_t buf;
+	union axis1bit16_t buf;
 
 	if (lsm6dso_temperature_raw_get(data->ctx, buf.u8bit) < 0) {
 		LOG_DBG("Failed to read sample");
@@ -750,31 +751,32 @@ static int lsm6dso_init_chip(struct device *dev)
 static struct lsm6dso_data lsm6dso_data;
 
 static const struct lsm6dso_config lsm6dso_config = {
-	.bus_name = DT_INST_0_ST_LSM6DSO_BUS_NAME,
-#if defined(DT_ST_LSM6DSO_BUS_SPI)
+	.bus_name = DT_INST_BUS_LABEL(0),
+#if DT_ANY_INST_ON_BUS(spi)
 	.bus_init = lsm6dso_spi_init,
-	.spi_conf.frequency = DT_INST_0_ST_LSM6DSO_SPI_MAX_FREQUENCY,
+	.spi_conf.frequency = DT_INST_PROP(0, spi_max_frequency),
 	.spi_conf.operation = (SPI_OP_MODE_MASTER | SPI_MODE_CPOL |
 			       SPI_MODE_CPHA | SPI_WORD_SET(8) |
 			       SPI_LINES_SINGLE),
-	.spi_conf.slave     = DT_INST_0_ST_LSM6DSO_BASE_ADDRESS,
-#if defined(DT_INST_0_ST_LSM6DSO_CS_GPIOS_CONTROLLER)
-	.gpio_cs_port	    = DT_INST_0_ST_LSM6DSO_CS_GPIOS_CONTROLLER,
-	.cs_gpio	    = DT_INST_0_ST_LSM6DSO_CS_GPIOS_PIN,
+	.spi_conf.slave     = DT_INST_REG_ADDR(0),
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
+	.gpio_cs_port	    = DT_INST_SPI_DEV_CS_GPIOS_LABEL(0),
+	.cs_gpio	    = DT_INST_SPI_DEV_CS_GPIOS_PIN(0),
 
 	.spi_conf.cs        =  &lsm6dso_data.cs_ctrl,
 #else
 	.spi_conf.cs        = NULL,
 #endif
-#elif defined(DT_ST_LSM6DSO_BUS_I2C)
+#elif DT_ANY_INST_ON_BUS(i2c)
 	.bus_init = lsm6dso_i2c_init,
-	.i2c_slv_addr = DT_INST_0_ST_LSM6DSO_BASE_ADDRESS,
+	.i2c_slv_addr = DT_INST_REG_ADDR(0),
 #else
 #error "BUS MACRO NOT DEFINED IN DTS"
 #endif
 #ifdef CONFIG_LSM6DSO_TRIGGER
-	.int_gpio_port = DT_INST_0_ST_LSM6DSO_IRQ_GPIOS_CONTROLLER,
-	.int_gpio_pin = DT_INST_0_ST_LSM6DSO_IRQ_GPIOS_PIN,
+	.int_gpio_port = DT_INST_GPIO_LABEL(0, irq_gpios),
+	.int_gpio_pin = DT_INST_GPIO_PIN(0, irq_gpios),
+	.int_gpio_flags = DT_INST_GPIO_FLAGS(0, irq_gpios),
 #if defined(CONFIG_LSM6DSO_INT_PIN_1)
 	.int_pin = 1,
 #elif defined(CONFIG_LSM6DSO_INT_PIN_2)
@@ -823,6 +825,6 @@ static int lsm6dso_init(struct device *dev)
 
 static struct lsm6dso_data lsm6dso_data;
 
-DEVICE_AND_API_INIT(lsm6dso, DT_INST_0_ST_LSM6DSO_LABEL, lsm6dso_init,
+DEVICE_AND_API_INIT(lsm6dso, DT_INST_LABEL(0), lsm6dso_init,
 		    &lsm6dso_data, &lsm6dso_config, POST_KERNEL,
 		    CONFIG_SENSOR_INIT_PRIORITY, &lsm6dso_api_funcs);

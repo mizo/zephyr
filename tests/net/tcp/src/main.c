@@ -345,7 +345,7 @@ static struct net_pkt *setup_ipv6_tcp(struct net_if *iface,
 				      u16_t local_port)
 {
 	struct net_pkt *pkt;
-	struct net_tcp_hdr tcp_hdr;
+	struct net_tcp_hdr tcp_hdr = { 0 };
 
 	pkt = net_pkt_alloc_with_buffer(iface, sizeof(data),
 					AF_INET6, IPPROTO_TCP, K_FOREVER);
@@ -353,7 +353,10 @@ static struct net_pkt *setup_ipv6_tcp(struct net_if *iface,
 		return NULL;
 	}
 
-	net_ipv6_create(pkt, remote_addr, local_addr);
+	if (net_ipv6_create(pkt, remote_addr, local_addr)) {
+		net_pkt_unref(pkt);
+		return NULL;
+	}
 
 	tcp_hdr.src_port = htons(remote_port);
 	tcp_hdr.dst_port = htons(local_port);
@@ -374,7 +377,7 @@ static struct net_pkt *setup_ipv4_tcp(struct net_if *iface,
 				      u16_t local_port)
 {
 	struct net_pkt *pkt;
-	struct net_tcp_hdr tcp_hdr;
+	struct net_tcp_hdr tcp_hdr = { 0 };
 
 	pkt = net_pkt_alloc_with_buffer(iface, sizeof(data),
 					AF_INET, IPPROTO_TCP, K_FOREVER);
@@ -382,7 +385,10 @@ static struct net_pkt *setup_ipv4_tcp(struct net_if *iface,
 		return NULL;
 	}
 
-	net_ipv4_create(pkt, remote_addr, local_addr);
+	if (net_ipv4_create(pkt, remote_addr, local_addr)) {
+		net_pkt_unref(pkt);
+		return NULL;
+	}
 
 	tcp_hdr.src_port = htons(remote_port);
 	tcp_hdr.dst_port = htons(local_port);
@@ -430,7 +436,7 @@ static struct net_pkt *setup_ipv6_tcp_long(struct net_if *iface,
 					   u16_t local_port)
 {
 	struct net_pkt *pkt;
-	struct net_tcp_hdr tcp_hdr;
+	struct net_tcp_hdr tcp_hdr = { 0 };
 
 	pkt = net_pkt_alloc_with_buffer(iface, sizeof(ipv6_hop_by_hop_ext_hdr) +
 					sizeof(data),
@@ -1378,14 +1384,17 @@ static struct dummy_api net_tcp_if_api_peer = {
 #define _ETH_L2_CTX_TYPE NET_L2_GET_CTX_TYPE(DUMMY_L2)
 
 NET_DEVICE_INIT_INSTANCE(net_tcp_test, "net_tcp_test", host,
-		net_tcp_dev_init, &net_tcp_context_data, NULL,
-		CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
-		&net_tcp_if_api, _ETH_L2_LAYER, _ETH_L2_CTX_TYPE, 127);
+			 net_tcp_dev_init, device_pm_control_nop,
+			 &net_tcp_context_data, NULL,
+			 CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
+			 &net_tcp_if_api, _ETH_L2_LAYER, _ETH_L2_CTX_TYPE, 127);
 
 NET_DEVICE_INIT_INSTANCE(net_tcp_test_peer, "net_tcp_test_peer", peer,
-		 net_tcp_dev_init, &net_tcp_context_data_peer, NULL,
-		 CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
-		 &net_tcp_if_api_peer, _ETH_L2_LAYER, _ETH_L2_CTX_TYPE, 127);
+			 net_tcp_dev_init, device_pm_control_nop,
+			 &net_tcp_context_data_peer, NULL,
+			 CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
+			 &net_tcp_if_api_peer,
+			 _ETH_L2_LAYER, _ETH_L2_CTX_TYPE, 127);
 
 static bool test_init_tcp_context(void)
 {
@@ -1665,7 +1674,7 @@ static bool test_init_tcp_connect(void)
 		return false;
 	}
 
-	if (k_sem_take(&wait_in_accept, WAIT_TIME_LONG)) {
+	if (k_sem_take(&wait_in_accept, K_MSEC(WAIT_TIME_LONG))) {
 		TC_ERROR("Timeout while waiting data back\n");
 		return false;
 	}
@@ -1687,7 +1696,7 @@ static bool test_init_tcp_connect(void)
 
 	DBG("Waiting v6 connection\n");
 
-	if (k_sem_take(&wait_connect, WAIT_TIME_LONG)) {
+	if (k_sem_take(&wait_connect, K_MSEC(WAIT_TIME_LONG))) {
 		TC_ERROR("Timeout while waiting data back\n");
 		return false;
 	}
@@ -1707,7 +1716,7 @@ static bool test_init_tcp_connect(void)
 		return false;
 	}
 
-	k_sem_take(&wait_connect, WAIT_TIME);
+	k_sem_take(&wait_connect, K_MSEC(WAIT_TIME));
 	if (!connect_cb_called) {
 		TC_ERROR("No IPv4 connect cb called on time, "
 			 "TCP connect test failed\n");

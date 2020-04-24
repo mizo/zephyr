@@ -8,13 +8,15 @@
  * https://www.st.com/resource/en/datasheet/lis2mdl.pdf
  */
 
+#define DT_DRV_COMPAT st_lis2mdl
+
 #include <string.h>
 #include <drivers/i2c.h>
 #include <logging/log.h>
 
 #include "lis2mdl.h"
 
-#ifdef DT_ST_LIS2MDL_BUS_I2C
+#if DT_ANY_INST_ON_BUS(i2c)
 
 #define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
 LOG_MODULE_DECLARE(LIS2MDL);
@@ -43,12 +45,12 @@ int lis2mdl_i2c_init(struct device *dev)
 {
 	struct lis2mdl_data *data = dev->driver_data;
 
-	data->ctx_i2c.read_reg = (lis2mdl_read_ptr) lis2mdl_i2c_read;
-	data->ctx_i2c.write_reg = (lis2mdl_write_ptr) lis2mdl_i2c_write;
+	data->ctx_i2c.read_reg = (stmdev_read_ptr) lis2mdl_i2c_read;
+	data->ctx_i2c.write_reg = (stmdev_write_ptr) lis2mdl_i2c_write;
 
 	data->ctx = &data->ctx_i2c;
 	data->ctx->handle = dev;
 
 	return 0;
 }
-#endif /* DT_ST_LIS2MDL_BUS_I2C */
+#endif /* DT_ANY_INST_ON_BUS(i2c) */

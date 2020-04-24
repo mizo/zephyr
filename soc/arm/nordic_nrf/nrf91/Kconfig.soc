@@ -1,9 +1,7 @@
-# Kconfig.soc - Nordic Semiconductor nRF91 MCU line
-#
+# Nordic Semiconductor nRF91 MCU line
+
 # Copyright (c) 2018 Nordic Semiconductor ASA
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 config SOC_NRF9160
 	depends on SOC_SERIES_NRF91X
@@ -21,6 +19,7 @@ config SOC_NRF9160
 	select HAS_HW_NRF_GPIOTE
 	select HAS_HW_NRF_I2S
 	select HAS_HW_NRF_IPC
+	select HAS_HW_NRF_NVMC_PE
 	select HAS_HW_NRF_PDM
 	select HAS_HW_NRF_POWER
 	select HAS_HW_NRF_PWM0
@@ -57,7 +56,7 @@ config SOC_NRF9160
 	select HAS_HW_NRF_WDT
 
 choice
-prompt "nRF91x MCU Selection"
+	prompt "nRF91x MCU Selection"
 	depends on SOC_SERIES_NRF91X
 
 config SOC_NRF9160_SICA

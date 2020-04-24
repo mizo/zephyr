@@ -8,16 +8,6 @@ config TINYCBOR
 
 if TINYCBOR
 
-config CBOR_NO_DFLT_WRITER
-	bool "No default writer support"
-	help
-	  This option specifies whether a default writer exists.
-
-config CBOR_NO_DFLT_READER
-	bool "No default reader support"
-	help
-	  This option specifies whether a default reader exists.
-
 config CBOR_ENCODER_NO_CHECK_USER
 	bool "No encoder checks for user args for validity"
 	help
@@ -36,13 +26,13 @@ config CBOR_PARSER_NO_STRICT_CHECKS
 
 config CBOR_FLOATING_POINT
 	bool "Floating point support"
-	select NEWLIB_LIBC
+	select REQUIRES_FULL_LIBC
 	help
 	  This option enables floating point support.
 
 config CBOR_HALF_FLOAT_TYPE
 	bool "Half float type support"
-	select NEWLIB_LIBC
+	select REQUIRES_FULL_LIBC
 	help
 	  This option enables half float type support.
 

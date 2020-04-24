@@ -16,7 +16,7 @@
 #include <em_emu.h>
 #include <em_chip.h>
 #include <arch/cpu.h>
-#include <cortex_m/exc.h>
+#include <arch/arm/aarch32/cortex_m/cmsis.h>
 
 #include <logging/log.h>
 
@@ -60,9 +60,18 @@ static ALWAYS_INLINE void clock_init(void)
 	CMU_OscillatorEnable(cmuOsc_HFRCO, false, false);
 #elif (defined CONFIG_CMU_HFCLK_HFRCO)
 	/*
-	 * This is the default clock, the controller starts with, so nothing to
-	 * do here.
+	 * This is the default clock, the controller starts with
 	 */
+
+#ifdef CONFIG_SOC_GECKO_HAS_HFRCO_FREQRANGE
+	if (CONFIG_CMU_HFRCO_FREQ) {
+		/* Setting system HFRCO frequency */
+		CMU_HFRCOBandSet(CONFIG_CMU_HFRCO_FREQ);
+
+		/* Using HFRCO as high frequency clock, HFCLK */
+		CMU_ClockSelectSet(cmuClock_HF, cmuSelect_HFRCO);
+	}
+#endif
 #else
 #error "Unsupported clock source for HFCLK selected"
 #endif
@@ -70,12 +79,7 @@ static ALWAYS_INLINE void clock_init(void)
 	/* Enable the High Frequency Peripheral Clock */
 	CMU_ClockEnable(cmuClock_HFPER, true);
 
-#ifdef CONFIG_LOG_BACKEND_SWO
-	/* Select HFCLK as the debug trace clock */
-	CMU->DBGCLKSEL = CMU_DBGCLKSEL_DBG_HFCLK;
-#endif
-
-#ifdef CONFIG_GPIO_GECKO
+#if defined(CONFIG_GPIO_GECKO) || defined(CONFIG_LOG_BACKEND_SWO)
 	CMU_ClockEnable(cmuClock_GPIO, true);
 #endif
 }
@@ -98,6 +102,27 @@ static ALWAYS_INLINE void dcdc_init(void)
 #endif
 }
 #endif
+
+#ifdef CONFIG_LOG_BACKEND_SWO
+static void swo_init(void)
+{
+	struct soc_gpio_pin pin_swo = PIN_SWO;
+
+	/* Select HFCLK as the debug trace clock */
+	CMU->DBGCLKSEL = CMU_DBGCLKSEL_DBG_HFCLK;
+
+#if defined(_GPIO_ROUTEPEN_MASK)
+	/* Enable Serial wire output pin */
+	GPIO->ROUTEPEN |= GPIO_ROUTEPEN_SWVPEN;
+	/* Set SWO location */
+	GPIO->ROUTELOC0 =
+		SWO_LOCATION << _GPIO_ROUTELOC0_SWVLOC_SHIFT;
+#else
+	GPIO->ROUTE = GPIO_ROUTE_SWOPEN | (SWO_LOCATION << 8);
+#endif
+	soc_gpio_configure(&pin_swo);
+}
+#endif /* CONFIG_LOG_BACKEND_SWO */
 
 /**
  * @brief Perform basic hardware initialization
@@ -131,6 +156,11 @@ static int silabs_exx32_init(struct device *arg)
 	 * if configured in the kernel, NOP otherwise
 	 */
 	NMI_INIT();
+
+#ifdef CONFIG_LOG_BACKEND_SWO
+	/* Configure SWO debug output */
+	swo_init();
+#endif
 
 	/* restore interrupt state */
 	irq_unlock(oldLevel);

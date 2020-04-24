@@ -1,7 +1,7 @@
-.. _SDHC_disks:
+.. _sdhc_api:
 
-SDHC disks
-##########
+SDHC
+####
 
 Zephyr includes support for connecting an SD card via the SPI bus.
 This can be used with Zephyr's built-in filesystem support to read and
@@ -25,7 +25,7 @@ MMC cards are not supported and will be ignored.
 Enabling
 ********
 
-For example, this device tree fragment adds an SDHC card slot on ``spi1``,
+For example, this devicetree fragment adds an SDHC card slot on ``spi1``,
 uses ``PA27`` for chip select, and runs the SPI bus at 24 MHz once the
 SDHC card has been initialized:
 
@@ -50,6 +50,6 @@ Usage
 The SDHC card will be automatically detected and initialized by the
 filesystem driver when the board boots.
 
-To read and write files and directories, see the :ref:`file_system` in
+To read and write files and directories, see the :ref:`file_system_api` in
 :zephyr_file:`include/fs.h` such as :c:func:`fs_open()`,
 :c:func:`fs_read()`, and :c:func:`fs_write()`.

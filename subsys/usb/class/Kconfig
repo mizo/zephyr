@@ -1,10 +1,7 @@
-# Kconfig - USB class drivers configuration options
+# USB class drivers configuration options
 
-#
 # Copyright (c) 2016 Wind River Systems, Inc.
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 config USB_CDC_ACM
 	bool "USB CDC ACM Device Class Driver"
@@ -94,21 +91,23 @@ config USB_DEVICE_BLUETOOTH
 	help
 	  USB Bluetooth device class driver
 
-config BLUETOOTH_INT_EP_MPS
-	int
+config USB_DEVICE_BLUETOOTH_VS_H4
+	bool "Enable USB Bluetooth H4 vendor command"
 	depends on USB_DEVICE_BLUETOOTH
-	default 16
-	range 8 64
+	select BT_HCI_RAW_H4
+	select BT_HCI_RAW_CMD_EXT
 	help
-	  Bluetooth device class interrupt endpoint size
+	  Enables vendor command to switch to H:4 transport using the bulk
+	  endpoint.
 
-config BLUETOOTH_BULK_EP_MPS
-	int
-	depends on USB_DEVICE_BLUETOOTH
-	default 64
-	range 8 64
+config USB_DEVICE_BT_H4
+	bool "USB Bluetooth H4 Device Class Driver"
+	select BT
+	select BT_HCI_RAW
+	select BT_HCI_RAW_H4
+	select BT_HCI_RAW_H4_ENABLE
 	help
-	  Bluetooth device class bulk endpoint size
+	  USB Bluetooth H4 device class driver
 
 config USB_DEVICE_LOOPBACK
 	bool "USB Loopback Function Driver"
@@ -131,6 +130,7 @@ config USB_DFU_CLASS
 	select MPU_ALLOW_FLASH_WRITE
 	select POLL
 	depends on IMG_MANAGER
+	select IMG_ERASE_PROGRESSIVELY if SOC_FLASH_NRF
 	help
 	  USB DFU class driver
 
@@ -147,8 +147,7 @@ config USB_DFU_DETACH_TIMEOUT
 	default 1000
 
 config USB_DFU_DEFAULT_POLLTIMEOUT
-	prompt "Default value for bwPollTimeout"
-	int
+	int "Default value for bwPollTimeout"
 	depends on USB_DFU_CLASS
 	default 256
 	range 0 1000

@@ -8,19 +8,19 @@
  * https://www.st.com/resource/en/datasheet/lis2mdl.pdf
  */
 
+#define DT_DRV_COMPAT st_lis2mdl
+
 #include <init.h>
 #include <sys/__assert.h>
 #include <sys/byteorder.h>
 #include <drivers/sensor.h>
 #include <string.h>
-
+#include <logging/log.h>
 #include "lis2mdl.h"
 
 struct lis2mdl_data lis2mdl_data;
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-#include <logging/log.h>
-LOG_MODULE_REGISTER(LIS2MDL);
+LOG_MODULE_REGISTER(LIS2MDL, CONFIG_SENSOR_LOG_LEVEL);
 
 #ifdef CONFIG_LIS2MDL_MAG_ODR_RUNTIME
 static int lis2mdl_set_odr(struct device *dev, const struct sensor_value *val)
@@ -58,7 +58,7 @@ static int lis2mdl_set_hard_iron(struct device *dev, enum sensor_channel chan,
 {
 	struct lis2mdl_data *lis2mdl = dev->driver_data;
 	u8_t i;
-	axis3bit16_t offset;
+	union axis3bit16_t offset;
 
 	for (i = 0U; i < 3; i++) {
 		offset.i16bit[i] = sys_cpu_to_le16(val->val1);
@@ -174,7 +174,7 @@ static int lis2mdl_attr_set(struct device *dev,
 static int lis2mdl_sample_fetch_mag(struct device *dev)
 {
 	struct lis2mdl_data *lis2mdl = dev->driver_data;
-	axis3bit16_t raw_mag;
+	union axis3bit16_t raw_mag;
 
 	/* fetch raw data sample */
 	if (lis2mdl_magnetic_raw_get(lis2mdl->ctx, raw_mag.u8bit) < 0) {
@@ -192,7 +192,7 @@ static int lis2mdl_sample_fetch_mag(struct device *dev)
 static int lis2mdl_sample_fetch_temp(struct device *dev)
 {
 	struct lis2mdl_data *lis2mdl = dev->driver_data;
-	axis1bit16_t raw_temp;
+	union axis1bit16_t raw_temp;
 	s32_t temp;
 
 	/* fetch raw temperature sample */
@@ -257,29 +257,30 @@ static int lis2mdl_init_interface(struct device *dev)
 }
 
 static const struct lis2mdl_config lis2mdl_dev_config = {
-	.master_dev_name = DT_INST_0_ST_LIS2MDL_BUS_NAME,
+	.master_dev_name = DT_INST_BUS_LABEL(0),
 #ifdef CONFIG_LIS2MDL_TRIGGER
-	.gpio_name = DT_INST_0_ST_LIS2MDL_IRQ_GPIOS_CONTROLLER,
-	.gpio_pin = DT_INST_0_ST_LIS2MDL_IRQ_GPIOS_PIN,
+	.gpio_name = DT_INST_GPIO_LABEL(0, irq_gpios),
+	.gpio_pin = DT_INST_GPIO_PIN(0, irq_gpios),
+	.gpio_flags = DT_INST_GPIO_FLAGS(0, irq_gpios),
 #endif  /* CONFIG_LIS2MDL_TRIGGER */
-#if defined(DT_ST_LIS2MDL_BUS_SPI)
+#if DT_ANY_INST_ON_BUS(spi)
 	.bus_init = lis2mdl_spi_init,
-	.spi_conf.frequency = DT_INST_0_ST_LIS2MDL_SPI_MAX_FREQUENCY,
+	.spi_conf.frequency = DT_INST_PROP(0, spi_max_frequency),
 	.spi_conf.operation = (SPI_OP_MODE_MASTER | SPI_MODE_CPOL |
 			       SPI_MODE_CPHA | SPI_WORD_SET(8) |
 			       SPI_LINES_SINGLE),
-	.spi_conf.slave     = DT_INST_0_ST_LIS2MDL_BASE_ADDRESS,
-#if defined(DT_INST_0_ST_LIS2MDL_CS_GPIOS_CONTROLLER)
-	.gpio_cs_port	    = DT_INST_0_ST_LIS2MDL_CS_GPIOS_CONTROLLER,
-	.cs_gpio	    = DT_INST_0_ST_LIS2MDL_CS_GPIOS_PIN,
+	.spi_conf.slave     = DT_INST_REG_ADDR(0),
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
+	.gpio_cs_port	    = DT_INST_SPI_DEV_CS_GPIOS_LABEL(0),
+	.cs_gpio	    = DT_INST_SPI_DEV_CS_GPIOS_PIN(0),
 
 	.spi_conf.cs        =  &lis2mdl_data.cs_ctrl,
 #else
 	.spi_conf.cs        = NULL,
 #endif
-#elif defined(DT_ST_LIS2MDL_BUS_I2C)
+#elif DT_ANY_INST_ON_BUS(i2c)
 	.bus_init = lis2mdl_i2c_init,
-	.i2c_slv_addr = DT_INST_0_ST_LIS2MDL_BASE_ADDRESS,
+	.i2c_slv_addr = DT_INST_REG_ADDR(0),
 #else
 #error "BUS MACRO NOT DEFINED IN DTS"
 #endif
@@ -311,6 +312,13 @@ static int lis2mdl_init(struct device *dev)
 	}
 
 	k_busy_wait(100);
+
+#if CONFIG_LIS2MDL_SPI_FULL_DUPLEX
+	/* After s/w reset set SPI 4wires again if the case */
+	if (lis2mdl_spi_mode_set(lis2mdl->ctx, LIS2MDL_SPI_4_WIRE) < 0) {
+		return -EIO;
+	}
+#endif
 
 	/* enable BDU */
 	if (lis2mdl_block_data_update_set(lis2mdl->ctx, PROPERTY_ENABLE) < 0) {
@@ -353,6 +361,6 @@ static int lis2mdl_init(struct device *dev)
 	return 0;
 }
 
-DEVICE_AND_API_INIT(lis2mdl, DT_INST_0_ST_LIS2MDL_LABEL, lis2mdl_init,
+DEVICE_AND_API_INIT(lis2mdl, DT_INST_LABEL(0), lis2mdl_init,
 		     &lis2mdl_data, &lis2mdl_dev_config, POST_KERNEL,
 		     CONFIG_SENSOR_INIT_PRIORITY, &lis2mdl_driver_api);

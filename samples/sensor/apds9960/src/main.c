@@ -29,7 +29,7 @@ void main(void)
 	struct sensor_value intensity, pdata;
 
 	printk("APDS9960 sample application\n");
-	dev = device_get_binding(DT_INST_0_AVAGO_APDS9960_LABEL);
+	dev = device_get_binding(DT_LABEL(DT_INST(0, avago_apds9960)));
 	if (!dev) {
 		printk("sensor: device not found.\n");
 		return;
@@ -63,7 +63,7 @@ void main(void)
 		printk("Waiting for a threshold event\n");
 		k_sem_take(&sem, K_FOREVER);
 #else
-		k_sleep(5000);
+		k_sleep(K_MSEC(5000));
 #endif
 		if (sensor_sample_fetch(dev)) {
 			printk("sensor_sample fetch failed\n");
@@ -81,7 +81,7 @@ void main(void)
 		p_state = DEVICE_PM_LOW_POWER_STATE;
 		device_set_power_state(dev, p_state, NULL, NULL);
 		printk("set low power state for 2s\n");
-		k_sleep(2000);
+		k_sleep(K_MSEC(2000));
 		p_state = DEVICE_PM_ACTIVE_STATE;
 		device_set_power_state(dev, p_state, NULL, NULL);
 #endif

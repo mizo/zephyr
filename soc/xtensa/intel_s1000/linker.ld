@@ -12,16 +12,16 @@
  */
 
 OUTPUT_ARCH(xtensa)
-#define _LINKER
-#define _ASMLANGUAGE
 
-#include <generated_dts_board.h>
+#include <devicetree.h>
 #include "memory.h"
 #include <autoconf.h>
 #include <linker/sections.h>
 
 #include <linker/linker-defs.h>
 #include <linker/linker-tool.h>
+
+#include <xtensa/config/core-isa.h>
 
 #define RAMABLE_REGION ram :ram_phdr
 #define ROMABLE_REGION ram :ram_phdr
@@ -141,6 +141,9 @@ PHDRS
 _rom_store_table = 0;
 PROVIDE(_memmap_vecbase_reset = XCHAL_VECBASE_RESET_PADDR_SRAM);
 
+PROVIDE(__memctl_default = 0xFFFFFF00);
+PROVIDE(_MemErrorHandler = 0xFFFFFF00);
+
 ENTRY(CONFIG_KERNEL_ENTRY)
 
 /* Various memory-map dependent cache attribute settings: */
@@ -178,7 +181,17 @@ _memmap_cacheattr_bp_allvalid = 0x22222222;
  * as cacheattr_set macro sets them both to the same set of
  * attributes.
  */
+#ifndef CONFIG_SMP
 _memmap_cacheattr_intel_s1000 = 0x1212fff2;
+#else
+/*
+ * Since there is no cache coherence between cores,
+ * set the data section (0xA0000000 - 0xBFFFFFFF) to be
+ * non-cacheable, for now. Until we have proper support
+ * to manipulate cache lines.
+ */
+_memmap_cacheattr_intel_s1000 = 0x1222fff2;
+#endif
 
 PROVIDE(_memmap_cacheattr_reset = _memmap_cacheattr_intel_s1000);
 SECTIONS
@@ -444,6 +457,7 @@ SECTIONS
     *(.dma_buffers)
     _dma_buf_end = ABSOLUTE(.);
   } >LPRAM_REGION
+  _heap_sentry = DT_L2_SRAM_BASE + DT_L2_SRAM_SIZE;
   .comment  0 :  { *(.comment) }
   .debug 0 : { *(.debug) }
   .line 0 : { *(.line) }

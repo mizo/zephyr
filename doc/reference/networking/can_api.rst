@@ -1,4 +1,4 @@
-.. _can_interface:
+.. _can_api:
 
 Controller Area Network (CAN)
 #############################
@@ -332,4 +332,3 @@ API Reference
 
 .. doxygengroup:: can_interface
    :project: Zephyr
-

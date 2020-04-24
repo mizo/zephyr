@@ -31,7 +31,7 @@
 		};
 
 		spi2: spi@40003800 {
-			compatible = "st,stm32-spi-fifo";
+			compatible = "st,stm32-spi-fifo", "st,stm32-spi";
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <0x40003800 0x400>;
@@ -51,6 +51,22 @@
 				clocks = <&rcc STM32_CLOCK_BUS_AHB1 0x00200000>;
 				label = "GPIOE";
 			};
+		};
+
+		dma1: dma@40020000 {
+			interrupts = <9 0 10 0 10 0 11 0 11 0 11 0 11 0>;
+		};
+
+		dma2: dma@40020400 {
+			compatible = "st,stm32-dma";
+			#dma-cells = <4>;
+			reg = <0x40020400 0x400>;
+			interrupts = <9 0 10 0 10 0 11 0 11 0 11 0
+				      11 0 10 0 10 0 11 0 11 0 11 0>;
+			clocks = <&rcc STM32_CLOCK_BUS_AHB1 0x2>;
+			st,mem2mem;
+			status = "disabled";
+			label = "DMA_2";
 		};
 	};
 };

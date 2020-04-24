@@ -6,6 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT st_lsm9ds0_gyro
+
 #include <drivers/sensor.h>
 #include <kernel.h>
 #include <device.h>
@@ -18,8 +20,7 @@
 
 #include "lsm9ds0_gyro.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_REGISTER(LSM9DS0_GYRO);
+LOG_MODULE_REGISTER(LSM9DS0_GYRO, CONFIG_SENSOR_LOG_LEVEL);
 
 static inline int lsm9ds0_gyro_power_ctrl(struct device *dev, int power,
 					  int x_en, int y_en, int z_en)
@@ -345,17 +346,18 @@ static int lsm9ds0_gyro_init(struct device *dev)
 }
 
 static const struct lsm9ds0_gyro_config lsm9ds0_gyro_config = {
-	.i2c_master_dev_name = DT_INST_0_ST_LSM9DS0_GYRO_BUS_NAME,
-	.i2c_slave_addr = DT_INST_0_ST_LSM9DS0_GYRO_BASE_ADDRESS,
+	.i2c_master_dev_name = DT_INST_BUS_LABEL(0),
+	.i2c_slave_addr = DT_INST_REG_ADDR(0),
 #if defined(CONFIG_LSM9DS0_GYRO_TRIGGER_DRDY)
-	.gpio_drdy_dev_name = DT_INST_0_ST_LSM9DS0_GYRO_IRQ_GPIOS_CONTROLLER,
-	.gpio_drdy_int_pin = DT_INST_0_ST_LSM9DS0_GYRO_IRQ_GPIOS_PIN,
+	.gpio_drdy_dev_name = DT_INST_GPIO_LABEL(0, irq_gpios),
+	.gpio_drdy_int_pin = DT_INST_GPIO_PIN(0, irq_gpios),
+	.gpio_drdy_int_flags = DT_INST_GPIO_FLAGS(0, irq_gpios),
 #endif
 };
 
 static struct lsm9ds0_gyro_data lsm9ds0_gyro_data;
 
-DEVICE_AND_API_INIT(lsm9ds0_gyro, DT_INST_0_ST_LSM9DS0_GYRO_LABEL,
+DEVICE_AND_API_INIT(lsm9ds0_gyro, DT_INST_LABEL(0),
 		    lsm9ds0_gyro_init, &lsm9ds0_gyro_data, &lsm9ds0_gyro_config,
 		    POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &lsm9ds0_gyro_api_funcs);

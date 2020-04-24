@@ -18,8 +18,8 @@
  * this frequency should much the one set by the SWO viewer program.
  *
  * The initialization code assumes that SWO core frequency is equal to HCLK
- * as defined by DT_CPU_CLOCK_FREQUENCY. This may require additional,
- * vendor specific configuration.
+ * as defined by the clock-frequency property in the CPU node. This may require
+ * additional, vendor specific configuration.
  */
 
 #include <logging/log_backend.h>
@@ -36,7 +36,12 @@
 #if CONFIG_LOG_BACKEND_SWO_FREQ_HZ == 0
 #define SWO_FREQ_DIV  1
 #else
-#define SWO_FREQ (DT_CPU_CLOCK_FREQUENCY + (CONFIG_LOG_BACKEND_SWO_FREQ_HZ / 2))
+#if DT_NODE_HAS_PROP(DT_PATH(cpus, cpu_0), clock_frequency)
+#define CPU_FREQ DT_PROP(DT_PATH(cpus, cpu_0), clock_frequency)
+#else
+#error "Missing DT 'clock-frequency' property on cpu@0 node"
+#endif
+#define SWO_FREQ (CPU_FREQ + (CONFIG_LOG_BACKEND_SWO_FREQ_HZ / 2))
 #define SWO_FREQ_DIV  (SWO_FREQ / CONFIG_LOG_BACKEND_SWO_FREQ_HZ)
 #if SWO_FREQ_DIV > 0xFFFF
 #error CONFIG_LOG_BACKEND_SWO_FREQ_HZ is too low. SWO clock divider is 16-bit. \
@@ -63,7 +68,10 @@ LOG_OUTPUT_DEFINE(log_output, char_out, buf, sizeof(buf));
 static void log_backend_swo_put(const struct log_backend *const backend,
 		struct log_msg *msg)
 {
-	log_backend_std_put(&log_output, 0, msg);
+	u32_t flag = IS_ENABLED(CONFIG_LOG_BACKEND_SWO_SYST_ENABLE) ?
+		LOG_OUTPUT_FLAG_FORMAT_SYST : 0;
+
+	log_backend_std_put(&log_output, flag, msg);
 }
 
 static void log_backend_swo_init(void)
@@ -107,7 +115,10 @@ static void log_backend_swo_sync_string(const struct log_backend *const backend,
 		struct log_msg_ids src_level, u32_t timestamp,
 		const char *fmt, va_list ap)
 {
-	log_backend_std_sync_string(&log_output, 0, src_level,
+	u32_t flag = IS_ENABLED(CONFIG_LOG_BACKEND_SWO_SYST_ENABLE) ?
+		LOG_OUTPUT_FLAG_FORMAT_SYST : 0;
+
+	log_backend_std_sync_string(&log_output, flag, src_level,
 				    timestamp, fmt, ap);
 }
 
@@ -116,7 +127,10 @@ static void log_backend_swo_sync_hexdump(
 		struct log_msg_ids src_level, u32_t timestamp,
 		const char *metadata, const u8_t *data, u32_t length)
 {
-	log_backend_std_sync_hexdump(&log_output, 0, src_level,
+	u32_t flag = IS_ENABLED(CONFIG_LOG_BACKEND_SWO_SYST_ENABLE) ?
+		LOG_OUTPUT_FLAG_FORMAT_SYST : 0;
+
+	log_backend_std_sync_hexdump(&log_output, flag, src_level,
 				     timestamp, metadata, data, length);
 }
 

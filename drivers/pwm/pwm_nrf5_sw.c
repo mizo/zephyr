@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT nordic_nrf_sw_pwm
+
 #include <soc.h>
 
 #include <drivers/pwm.h>
@@ -14,13 +16,13 @@
 LOG_MODULE_REGISTER(pwm_nrf5_sw);
 
 /* One compare channel is needed to set the PWM period, hence +1. */
-#if ((DT_INST_0_NORDIC_NRF_SW_PWM_CHANNEL_COUNT + 1) > \
+#if ((DT_INST_PROP(0, channel_count) + 1) > \
 	(_CONCAT( \
-		_CONCAT(TIMER, DT_INST_0_NORDIC_NRF_SW_PWM_TIMER_INSTANCE), \
+		_CONCAT(TIMER, DT_INST_PROP(0, timer_instance)), \
 		_CC_NUM)))
 #error "Invalid number of PWM channels configured."
 #endif
-#define PWM_0_MAP_SIZE DT_INST_0_NORDIC_NRF_SW_PWM_CHANNEL_COUNT
+#define PWM_0_MAP_SIZE DT_INST_PROP(0, channel_count)
 
 struct pwm_config {
 	NRF_TIMER_Type *timer;
@@ -87,7 +89,8 @@ static u8_t pwm_channel_map(struct pwm_data *data, u8_t map_size,
 }
 
 static int pwm_nrf5_sw_pin_set(struct device *dev, u32_t pwm,
-			       u32_t period_cycles, u32_t pulse_cycles)
+			       u32_t period_cycles, u32_t pulse_cycles,
+			       pwm_flags_t flags)
 {
 	struct pwm_config *config;
 	NRF_TIMER_Type *timer;
@@ -100,6 +103,11 @@ static int pwm_nrf5_sw_pin_set(struct device *dev, u32_t pwm,
 	config = (struct pwm_config *)dev->config->config_info;
 	timer = config->timer;
 	data = dev->driver_data;
+
+	if (flags) {
+		/* PWM polarity not supported (yet?) */
+		return -ENOTSUP;
+	}
 
 	/* check if requested period is allowed while other channels are
 	 * active.
@@ -245,17 +253,17 @@ static int pwm_nrf5_sw_init(struct device *dev)
 }
 
 static const struct pwm_config pwm_nrf5_sw_0_config = {
-	.timer = _CONCAT(NRF_TIMER, DT_INST_0_NORDIC_NRF_SW_PWM_TIMER_INSTANCE),
-	.ppi_base = DT_INST_0_NORDIC_NRF_SW_PWM_PPI_BASE,
-	.gpiote_base = DT_INST_0_NORDIC_NRF_SW_PWM_GPIOTE_BASE,
+	.timer = _CONCAT(NRF_TIMER, DT_INST_PROP(0, timer_instance)),
+	.ppi_base = DT_INST_PROP(0, ppi_base),
+	.gpiote_base = DT_INST_PROP(0, gpiote_base),
 	.map_size = PWM_0_MAP_SIZE,
-	.prescaler = DT_INST_0_NORDIC_NRF_SW_PWM_CLOCK_PRESCALER,
+	.prescaler = DT_INST_PROP(0, clock_prescaler),
 };
 
 static struct pwm_data pwm_nrf5_sw_0_data;
 
 DEVICE_AND_API_INIT(pwm_nrf5_sw_0,
-		    DT_INST_0_NORDIC_NRF_SW_PWM_LABEL,
+		    DT_INST_LABEL(0),
 		    pwm_nrf5_sw_init,
 		    &pwm_nrf5_sw_0_data,
 		    &pwm_nrf5_sw_0_config,

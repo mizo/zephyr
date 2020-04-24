@@ -12,6 +12,7 @@ static int board_pinmux_init(struct device *dev)
 {
 	struct device *muxa = device_get_binding(DT_ATMEL_SAM0_PINMUX_PINMUX_A_LABEL);
 	struct device *muxb = device_get_binding(DT_ATMEL_SAM0_PINMUX_PINMUX_B_LABEL);
+	struct device *muxc = device_get_binding(DT_ATMEL_SAM0_PINMUX_PINMUX_C_LABEL);
 
 	ARG_UNUSED(dev);
 
@@ -21,16 +22,19 @@ static int board_pinmux_init(struct device *dev)
 	pinmux_pin_set(muxa, 5, PINMUX_FUNC_D);
 #endif
 #if DT_ATMEL_SAM0_UART_SERCOM_1_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_UART_SERCOM_2_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_UART_SERCOM_3_BASE_ADDRESS
-#error Pin mapping is not configured
+	/* NOTE: SERCOM3 UART is used by the UART driver tests */
+	/* SERCOM3 on RX=PA22, TX=PA23 */
+	pinmux_pin_set(muxa, 22, PINMUX_FUNC_C);
+	pinmux_pin_set(muxa, 23, PINMUX_FUNC_C);
 #endif
 #if DT_ATMEL_SAM0_UART_SERCOM_4_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_UART_SERCOM_5_BASE_ADDRESS
 	/* SERCOM5 on RX=PA23, TX=PA22 */
@@ -39,19 +43,29 @@ static int board_pinmux_init(struct device *dev)
 #endif
 
 #if DT_ATMEL_SAM0_SPI_SERCOM_0_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_SPI_SERCOM_1_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_SPI_SERCOM_2_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_SPI_SERCOM_3_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_SPI_SERCOM_4_BASE_ADDRESS
-#error Pin mapping is not configured
+	/**
+	 * SPI SERCOM4 on
+	 *  MISO = PC19/pad 0,
+	 *  CS   = PB31/pad 1,
+	 *  MOSI = PB30/pad 2,
+	 *  SCK  = PC18/pad 3
+	 */
+	pinmux_pin_set(muxc, 19, PINMUX_FUNC_F);
+	pinmux_pin_set(muxb, 31, PINMUX_FUNC_F);
+	pinmux_pin_set(muxb, 30, PINMUX_FUNC_F);
+	pinmux_pin_set(muxc, 18, PINMUX_FUNC_F);
 #endif
 #if DT_ATMEL_SAM0_SPI_SERCOM_5_BASE_ADDRESS
 	pinmux_pin_set(muxb,  2, PINMUX_FUNC_D);
@@ -60,7 +74,7 @@ static int board_pinmux_init(struct device *dev)
 #endif
 
 #if DT_ATMEL_SAM0_I2C_SERCOM_0_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_I2C_SERCOM_1_BASE_ADDRESS
 	/* SERCOM1 on SDA=PA16, SCL=PA17 */
@@ -68,16 +82,16 @@ static int board_pinmux_init(struct device *dev)
 	pinmux_pin_set(muxa, 17, PINMUX_FUNC_C);
 #endif
 #if DT_ATMEL_SAM0_I2C_SERCOM_2_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_I2C_SERCOM_3_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_I2C_SERCOM_4_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 #if DT_ATMEL_SAM0_I2C_SERCOM_5_BASE_ADDRESS
-#error Pin mapping is not configured
+#warning Pin mapping may not be configured
 #endif
 
 #ifdef CONFIG_USB_DC_SAM0

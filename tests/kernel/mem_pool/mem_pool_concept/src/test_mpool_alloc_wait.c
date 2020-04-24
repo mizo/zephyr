@@ -49,15 +49,31 @@ void tmpool_alloc_wait_ok(void *p1, void *p2, void *p3)
  */
 void test_mpool_alloc_wait_prio(void)
 {
-	struct k_mem_block block[BLK_NUM_MIN];
+	struct k_mem_block block[2 * BLK_NUM_MIN];
 	k_tid_t tid[THREAD_NUM];
+	int nb;
 
 	k_sem_init(&sync_sema, 0, THREAD_NUM);
+
 	/*allocated up all blocks*/
-	for (int i = 0; i < BLK_NUM_MIN; i++) {
-		zassert_true(k_mem_pool_alloc(&mpool1, &block[i], BLK_SIZE_MIN,
-					      K_NO_WAIT) == 0, NULL);
+	for (nb = 0; nb < ARRAY_SIZE(block); nb++) {
+		if (k_mem_pool_alloc(&mpool1, &block[nb], BLK_SIZE_MIN,
+				     K_NO_WAIT) != 0) {
+			break;
+		}
 	}
+
+	/* The original mem_pool would always be able to allocate
+	 * exactly "min blocks" before running out of space, the
+	 * heuristics used to size the sys_heap backend are more
+	 * flexible.
+	 */
+#ifdef CONFIG_MEM_POOL_HEAP_BACKEND
+	zassert_true(nb >= BLK_NUM_MIN, "nb %d want %d", nb, BLK_NUM_MIN);
+#else
+	zassert_true(nb == BLK_NUM_MIN, NULL);
+#endif
+
 
 	/**
 	 * TESTPOINT: when a suitable memory block becomes available, it is
@@ -70,17 +86,17 @@ void test_mpool_alloc_wait_prio(void)
 	/*the low-priority thread*/
 	tid[0] = k_thread_create(&tdata[0], tstack[0], STACK_SIZE,
 				 tmpool_alloc_wait_timeout, NULL, NULL, NULL,
-				 K_PRIO_PREEMPT(1), 0, 0);
+				 K_PRIO_PREEMPT(1), 0, K_NO_WAIT);
 	/*the highest-priority thread that has waited the longest*/
 	tid[1] = k_thread_create(&tdata[1], tstack[1], STACK_SIZE,
 				 tmpool_alloc_wait_ok, NULL, NULL, NULL,
-				 K_PRIO_PREEMPT(0), 0, 10);
+				 K_PRIO_PREEMPT(0), 0, K_MSEC(10));
 	/*the highest-priority thread that has waited shorter*/
 	tid[2] = k_thread_create(&tdata[2], tstack[2], STACK_SIZE,
 				 tmpool_alloc_wait_timeout, NULL, NULL, NULL,
-				 K_PRIO_PREEMPT(0), 0, 20);
+				 K_PRIO_PREEMPT(0), 0, K_MSEC(20));
 	/*relinquish CPU for above threads to start */
-	k_sleep(30);
+	k_sleep(K_MSEC(30));
 	/*free one block, expected to unblock thread "tid[1]"*/
 	k_mem_pool_free(&block[0]);
 	/*wait for all threads exit*/
@@ -93,7 +109,7 @@ void test_mpool_alloc_wait_prio(void)
 		k_thread_abort(tid[i]);
 	}
 	k_mem_pool_free(&block_ok);
-	for (int i = 1; i < BLK_NUM_MIN; i++) {
+	for (int i = 1; i < nb; i++) {
 		k_mem_pool_free(&block[i]);
 	}
 }

@@ -1,8 +1,5 @@
-#
 # Copyright (c) 2019 Intel Corporation.
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 menuconfig NET_L2_PPP
 	bool "Enable point-to-point (PPP) support [EXPERIMENTAL]"
@@ -63,6 +60,12 @@ config NET_L2_PPP_OPTION_MRU_NEG
 	bool "Negotiate MRU option if needed"
 	help
 	  Try to negotiate with peer for MRU (MTU) for the link.
+
+config NET_L2_PPP_OPTION_DNS_USE
+	bool "Use negotiated DNS servers"
+	depends on DNS_RESOLVER
+	help
+	  Use the DNS servers negotiated in the IPCP configuration.
 
 module = NET_L2_PPP
 module-dep = NET_LOG

@@ -8,16 +8,17 @@
  * https://www.st.com/resource/en/datasheet/lsm6dso.pdf
  */
 
+#define DT_DRV_COMPAT st_lsm6dso
+
 #include <string.h>
 #include "lsm6dso.h"
 #include <logging/log.h>
 
-#ifdef DT_ST_LSM6DSO_BUS_SPI
+#if DT_ANY_INST_ON_BUS(spi)
 
 #define LSM6DSO_SPI_READ		(1 << 7)
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_DECLARE(LSM6DSO);
+LOG_MODULE_DECLARE(LSM6DSO, CONFIG_SENSOR_LOG_LEVEL);
 
 static int lsm6dso_spi_read(struct device *dev, u8_t reg_addr,
 			    u8_t *value, u8_t len)
@@ -99,13 +100,13 @@ int lsm6dso_spi_init(struct device *dev)
 {
 	struct lsm6dso_data *data = dev->driver_data;
 
-	data->ctx_spi.read_reg = (lsm6dso_read_ptr) lsm6dso_spi_read,
-	data->ctx_spi.write_reg = (lsm6dso_write_ptr) lsm6dso_spi_write,
+	data->ctx_spi.read_reg = (stmdev_read_ptr) lsm6dso_spi_read,
+	data->ctx_spi.write_reg = (stmdev_write_ptr) lsm6dso_spi_write,
 
 	data->ctx = &data->ctx_spi;
 	data->ctx->handle = dev;
 
-#if defined(DT_INST_0_ST_LSM6DSO_CS_GPIOS_CONTROLLER)
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
 	const struct lsm6dso_config *cfg = dev->config->config_info;
 
 	/* handle SPI CS thru GPIO if it is the case */
@@ -124,4 +125,4 @@ int lsm6dso_spi_init(struct device *dev)
 
 	return 0;
 }
-#endif /* DT_ST_LSM6DSO_BUS_SPI */
+#endif /* DT_ANY_INST_ON_BUS(spi) */

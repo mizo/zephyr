@@ -202,14 +202,7 @@ void timer_int_handler(void *unused /* parameter is not used */
 				 )
 {
 #ifdef CONFIG_EXECUTION_BENCHMARKING
-	__asm__ __volatile__ (
-		"pushl %eax\n\t"
-		"pushl %edx\n\t"
-		"rdtsc\n\t"
-		"mov %eax, z_arch_timing_tick_start\n\t"
-		"mov %edx, z_arch_timing_tick_start+4\n\t"
-		"pop %edx\n\t"
-		"pop %eax\n\t");
+	arch_timing_tick_start = z_tsc_read();
 #endif
 	ARG_UNUSED(unused);
 
@@ -289,14 +282,7 @@ void timer_int_handler(void *unused /* parameter is not used */
 #endif /*CONFIG_TICKLESS_IDLE*/
 #endif
 #ifdef CONFIG_EXECUTION_BENCHMARKING
-	__asm__ __volatile__ (
-		"pushl %eax\n\t"
-		"pushl %edx\n\t"
-		"rdtsc\n\t"
-		"mov %eax, z_arch_timing_tick_end\n\t"
-		"mov %edx, z_arch_timing_tick_end+4\n\t"
-		"pop %edx\n\t"
-		"pop %eax\n\t");
+	arch_timing_tick_end = z_tsc_read();
 #endif /* CONFIG_EXECUTION_BENCHMARKING */
 }
 
@@ -404,7 +390,7 @@ void z_timer_idle_enter(s32_t ticks /* system ticks */
 				)
 {
 #ifdef CONFIG_TICKLESS_KERNEL
-	if (ticks != K_FOREVER) {
+	if (ticks != K_TICKS_FOREVER) {
 		/* Need to reprogram only if current program is smaller */
 		if (ticks > programmed_full_ticks) {
 			z_set_time(ticks);
@@ -431,7 +417,7 @@ void z_timer_idle_enter(s32_t ticks /* system ticks */
 
 	cycles = current_count_register_get();
 
-	if ((ticks == K_FOREVER) || (ticks > max_system_ticks)) {
+	if ((ticks == K_TICKS_FOREVER) || (ticks > max_system_ticks)) {
 		/*
 		 * The number of cycles until the timer must fire next might not fit
 		 * in the 32-bit counter register. To work around this, program
@@ -574,7 +560,7 @@ int z_clock_driver_init(struct device *device)
 	/* determine the timer counter value (in timer clock cycles/system tick)
 	 */
 
-	cycles_per_tick = sys_clock_hw_cycles_per_tick();
+	cycles_per_tick = k_ticks_to_cyc_floor32(1);
 
 	tickless_idle_init();
 

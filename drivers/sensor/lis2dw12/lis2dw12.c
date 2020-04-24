@@ -8,22 +8,23 @@
  * https://www.st.com/resource/en/datasheet/lis2dw12.pdf
  */
 
+#define DT_DRV_COMPAT st_lis2dw12
+
 #include <init.h>
 #include <sys/__assert.h>
 #include <sys/byteorder.h>
 #include <logging/log.h>
 #include <drivers/sensor.h>
 
-#if defined(DT_ST_LIS2DW12_BUS_SPI)
+#if DT_ANY_INST_ON_BUS(spi)
 #include <drivers/spi.h>
-#elif defined(DT_ST_LIS2DW12_BUS_I2C)
+#elif DT_ANY_INST_ON_BUS(i2c)
 #include <drivers/i2c.h>
 #endif
 
 #include "lis2dw12.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_REGISTER(LIS2DW12);
+LOG_MODULE_REGISTER(LIS2DW12, CONFIG_SENSOR_LOG_LEVEL);
 
 /**
  * lis2dw12_set_range - set full scale range for acc
@@ -179,7 +180,7 @@ static int lis2dw12_sample_fetch(struct device *dev, enum sensor_channel chan)
 	struct lis2dw12_data *lis2dw12 = dev->driver_data;
 	const struct lis2dw12_device_config *cfg = dev->config->config_info;
 	u8_t shift;
-	axis3bit16_t buf;
+	union axis3bit16_t buf;
 
 	/* fetch raw data sample */
 	if (lis2dw12_acceleration_raw_get(lis2dw12->ctx, buf.u8bit) < 0) {
@@ -221,9 +222,9 @@ static int lis2dw12_init_interface(struct device *dev)
 		return -EINVAL;
 	}
 
-#if defined(DT_ST_LIS2DW12_BUS_SPI)
+#if DT_ANY_INST_ON_BUS(spi)
 	lis2dw12_spi_init(dev);
-#elif defined(DT_ST_LIS2DW12_BUS_I2C)
+#elif DT_ANY_INST_ON_BUS(i2c)
 	lis2dw12_i2c_init(dev);
 #else
 #error "BUS MACRO NOT DEFINED IN DTS"
@@ -372,11 +373,12 @@ static int lis2dw12_init(struct device *dev)
 }
 
 const struct lis2dw12_device_config lis2dw12_cfg = {
-	.bus_name = DT_INST_0_ST_LIS2DW12_BUS_NAME,
+	.bus_name = DT_INST_BUS_LABEL(0),
 	.pm = CONFIG_LIS2DW12_POWER_MODE,
 #ifdef CONFIG_LIS2DW12_TRIGGER
-	.int_gpio_port = DT_INST_0_ST_LIS2DW12_IRQ_GPIOS_CONTROLLER,
-	.int_gpio_pin = DT_INST_0_ST_LIS2DW12_IRQ_GPIOS_PIN,
+	.int_gpio_port = DT_INST_GPIO_LABEL(0, irq_gpios),
+	.int_gpio_pin = DT_INST_GPIO_PIN(0, irq_gpios),
+	.int_gpio_flags = DT_INST_GPIO_FLAGS(0, irq_gpios),
 #if defined(CONFIG_LIS2DW12_INT_PIN_1)
 	.int_pin = 1,
 #elif defined(CONFIG_LIS2DW12_INT_PIN_2)
@@ -401,6 +403,6 @@ const struct lis2dw12_device_config lis2dw12_cfg = {
 
 struct lis2dw12_data lis2dw12_data;
 
-DEVICE_AND_API_INIT(lis2dw12, DT_INST_0_ST_LIS2DW12_LABEL, lis2dw12_init,
+DEVICE_AND_API_INIT(lis2dw12, DT_INST_LABEL(0), lis2dw12_init,
 	     &lis2dw12_data, &lis2dw12_cfg, POST_KERNEL,
 	     CONFIG_SENSOR_INIT_PRIORITY, &lis2dw12_driver_api);

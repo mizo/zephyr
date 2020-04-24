@@ -8,11 +8,13 @@
  * https://www.st.com/resource/en/datasheet/lis2mdl.pdf
  */
 
+#define DT_DRV_COMPAT st_lis2mdl
+
 #include <string.h>
 #include "lis2mdl.h"
 #include <logging/log.h>
 
-#ifdef DT_ST_LIS2MDL_BUS_SPI
+#if DT_ANY_INST_ON_BUS(spi)
 
 #define LIS2MDL_SPI_READ		(1 << 7)
 
@@ -99,13 +101,13 @@ int lis2mdl_spi_init(struct device *dev)
 {
 	struct lis2mdl_data *data = dev->driver_data;
 
-	data->ctx_spi.read_reg = (lis2mdl_read_ptr) lis2mdl_spi_read;
-	data->ctx_spi.write_reg = (lis2mdl_write_ptr) lis2mdl_spi_write;
+	data->ctx_spi.read_reg = (stmdev_read_ptr) lis2mdl_spi_read;
+	data->ctx_spi.write_reg = (stmdev_write_ptr) lis2mdl_spi_write;
 
 	data->ctx = &data->ctx_spi;
 	data->ctx->handle = dev;
 
-#if defined(DT_INST_0_ST_LIS2MDL_CS_GPIOS_CONTROLLER)
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
 	const struct lis2mdl_config *cfg = dev->config->config_info;
 
 	/* handle SPI CS thru GPIO if it is the case */
@@ -122,6 +124,13 @@ int lis2mdl_spi_init(struct device *dev)
 		cfg->gpio_cs_port, cfg->cs_gpio);
 #endif
 
+#if CONFIG_LIS2MDL_SPI_FULL_DUPLEX
+	/* Set SPI 4wires */
+	if (lis2mdl_spi_mode_set(data->ctx, LIS2MDL_SPI_4_WIRE) < 0) {
+		return -EIO;
+	}
+#endif
+
 	return 0;
 }
-#endif /* DT_ST_LIS2MDL_BUS_SPI */
+#endif /* DT_ANY_INST_ON_BUS(spi) */

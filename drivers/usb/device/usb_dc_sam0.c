@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT atmel_sam0_usb
+
 #define LOG_LEVEL CONFIG_USB_DRIVER_LOG_LEVEL
 #include <logging/log.h>
 LOG_MODULE_REGISTER(usb_dc_sam0);
@@ -21,8 +23,8 @@ LOG_MODULE_REGISTER(usb_dc_sam0);
 
 #define USB_SAM0_IN_EP 0x80
 
-#define REGS ((Usb *)DT_INST_0_ATMEL_SAM0_USB_BASE_ADDRESS)
-#define USB_NUM_ENDPOINTS DT_INST_0_ATMEL_SAM0_USB_NUM_BIDIR_ENDPOINTS
+#define REGS ((Usb *)DT_INST_REG_ADDR(0))
+#define USB_NUM_ENDPOINTS DT_INST_PROP(0, num_bidir_endpoints)
 
 struct usb_sam0_data {
 	UsbDeviceDescriptor descriptors[USB_NUM_ENDPOINTS];
@@ -132,6 +134,9 @@ static void usb_sam0_load_padcal(void)
 	u32_t pad_transp;
 	u32_t pad_trim;
 
+#ifdef USB_FUSES_TRANSN_ADDR
+	pad_transn = *(uint32_t *)USB_FUSES_TRANSN_ADDR;
+#else
 	pad_transn = (*((uint32_t *)(NVMCTRL_OTP4) +
 			(NVM_USB_PAD_TRANSN_POS / 32)) >>
 		      (NVM_USB_PAD_TRANSN_POS % 32)) &
@@ -140,9 +145,13 @@ static void usb_sam0_load_padcal(void)
 	if (pad_transn == 0x1F) {
 		pad_transn = 5U;
 	}
+#endif
 
 	regs->PADCAL.bit.TRANSN = pad_transn;
 
+#ifdef USB_FUSES_TRANSP_ADDR
+	pad_transp = *(uint32_t *)USB_FUSES_TRANSP_ADDR;
+#else
 	pad_transp = (*((uint32_t *)(NVMCTRL_OTP4) +
 			(NVM_USB_PAD_TRANSP_POS / 32)) >>
 		      (NVM_USB_PAD_TRANSP_POS % 32)) &
@@ -151,9 +160,13 @@ static void usb_sam0_load_padcal(void)
 	if (pad_transp == 0x1F) {
 		pad_transp = 29U;
 	}
+#endif
 
 	regs->PADCAL.bit.TRANSP = pad_transp;
 
+#ifdef USB_FUSES_TRIM_ADDR
+	pad_trim = *(uint32_t *)USB_FUSES_TRIM_ADDR;
+#else
 	pad_trim = (*((uint32_t *)(NVMCTRL_OTP4) +
 		      (NVM_USB_PAD_TRIM_POS / 32)) >>
 		    (NVM_USB_PAD_TRIM_POS % 32)) &
@@ -162,9 +175,18 @@ static void usb_sam0_load_padcal(void)
 	if (pad_trim == 0x7) {
 		pad_trim = 3U;
 	}
+#endif
 
 	regs->PADCAL.bit.TRIM = pad_trim;
 }
+
+#define SAM0_USB_IRQ_CONNECT(n) 				\
+	do {							\
+	IRQ_CONNECT(DT_INST_IRQ_BY_IDX(0, n, irq),		\
+		    DT_INST_IRQ_BY_IDX(0, n, priority),		\
+		    usb_sam0_isr, 0, 0);			\
+	irq_enable(DT_INST_IRQ_BY_IDX(0, n, irq));		\
+	} while (0)
 
 /* Attach by initializing the device */
 int usb_dc_attach(void)
@@ -172,6 +194,17 @@ int usb_dc_attach(void)
 	UsbDevice *regs = &REGS->DEVICE;
 	struct usb_sam0_data *data = usb_sam0_get_data();
 
+#ifdef MCLK
+	/* Enable the clock in MCLK */
+	MCLK->APBBMASK.bit.USB_ = 1;
+
+	/* Enable the GCLK - use 48 MHz source */
+	GCLK->PCHCTRL[USB_GCLK_ID].reg = GCLK_PCHCTRL_GEN(2)
+				       | GCLK_PCHCTRL_CHEN;
+
+	while (GCLK->SYNCBUSY.reg) {
+	}
+#else
 	/* Enable the clock in PM */
 	PM->APBBMASK.bit.USB_ = 1;
 
@@ -181,6 +214,7 @@ int usb_dc_attach(void)
 
 	while (GCLK->STATUS.bit.SYNCBUSY) {
 	}
+#endif /* !MCLK */
 
 	/* Configure */
 	regs->CTRLA.bit.SWRST = 1;
@@ -203,10 +237,18 @@ int usb_dc_attach(void)
 	regs->INTENSET.reg = USB_DEVICE_INTENSET_EORST;
 
 	/* Connect and enable the interrupt */
-	IRQ_CONNECT(DT_INST_0_ATMEL_SAM0_USB_IRQ_0,
-		    DT_INST_0_ATMEL_SAM0_USB_IRQ_0_PRIORITY,
-		    usb_sam0_isr, 0, 0);
-	irq_enable(DT_INST_0_ATMEL_SAM0_USB_IRQ_0);
+#if DT_INST_IRQ_HAS_CELL(0, irq)
+	SAM0_USB_IRQ_CONNECT(0);
+#endif
+#if DT_INST_IRQ_HAS_IDX(0, 1)
+	SAM0_USB_IRQ_CONNECT(1);
+#endif
+#if DT_INST_IRQ_HAS_IDX(0, 2)
+	SAM0_USB_IRQ_CONNECT(2);
+#endif
+#if DT_INST_IRQ_HAS_IDX(0, 3)
+	SAM0_USB_IRQ_CONNECT(3);
+#endif
 
 	/* Enable and attach */
 	regs->CTRLA.bit.ENABLE = 1;
@@ -232,7 +274,7 @@ int usb_dc_reset(void)
 {
 	UsbDevice *regs = &REGS->DEVICE;
 
-	irq_disable(DT_INST_0_ATMEL_SAM0_USB_IRQ_0);
+	irq_disable(DT_INST_IRQN(0));
 
 	regs->CTRLA.bit.SWRST = 1;
 	usb_sam0_wait_syncbusy();
@@ -454,7 +496,7 @@ int usb_dc_ep_enable(const u8_t ep)
 
 	if (ep_num >= USB_NUM_ENDPOINTS) {
 		LOG_ERR("endpoint index/address out of range");
-		return -1;
+		return -EINVAL;
 	}
 
 	if (for_in) {
@@ -479,7 +521,7 @@ int usb_dc_ep_disable(u8_t ep)
 
 	if (ep_num >= USB_NUM_ENDPOINTS) {
 		LOG_ERR("endpoint index/address out of range");
-		return -1;
+		return -EINVAL;
 	}
 
 	endpoint->EPINTENCLR.reg = USB_DEVICE_EPINTENCLR_TRCPT0

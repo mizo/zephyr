@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT arm_pl011
+
 #include <kernel.h>
 #include <arch/cpu.h>
 #include <init.h>
 #include <device.h>
 #include <soc.h>
 #include <drivers/uart.h>
-#include <arch/arm/cortex_m/cmsis.h>
-
 
 /*
  * UART PL011 register map structure
@@ -328,6 +328,7 @@ static void pl011_irq_callback_set(struct device *dev,
 	DEV_DATA(dev)->irq_cb = cb;
 	DEV_DATA(dev)->irq_cb_data = cb_data;
 }
+#endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 
 static const struct uart_driver_api pl011_driver_api = {
 	.poll_in = pl011_poll_in,
@@ -354,7 +355,6 @@ static int pl011_init(struct device *dev)
 {
 	int ret;
 	u32_t lcrh;
-	const struct uart_device_config *config = dev->config->config_info;
 
 	/* disable the uart */
 	pl011_disable(dev);
@@ -387,12 +387,14 @@ static int pl011_init(struct device *dev)
 	__ISB();
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
-	config->irq_config_func(dev);
+	DEV_CFG(dev)->irq_config_func(dev);
 #endif
 	pl011_enable(dev);
 
 	return 0;
 }
+
+#ifdef CONFIG_UART_INTERRUPT_DRIVEN
 void pl011_isr(void *arg)
 {
 	struct device *dev = arg;
@@ -413,19 +415,19 @@ static void pl011_irq_config_func_0(struct device *dev);
 #endif
 
 static struct uart_device_config pl011_cfg_port_0 = {
-	.base = (u8_t *)DT_PL011_PORT0_BASE_ADDRESS,
-	.sys_clk_freq = DT_PL011_PORT0_CLOCK_FREQUENCY,
+	.base = (u8_t *)DT_INST_REG_ADDR(0),
+	.sys_clk_freq = DT_INST_PROP_BY_PHANDLE(0, clocks, clock_frequency),
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	.irq_config_func = pl011_irq_config_func_0,
 #endif
 };
 
 static struct pl011_data pl011_data_port_0 = {
-	.baud_rate = DT_PL011_PORT0_BAUD_RATE,
+	.baud_rate = DT_INST_PROP(0, current_speed),
 };
 
 DEVICE_AND_API_INIT(pl011_port_0,
-		    DT_PL011_PORT0_NAME,
+		    DT_INST_LABEL(0),
 		    &pl011_init,
 		    &pl011_data_port_0,
 		    &pl011_cfg_port_0, PRE_KERNEL_1,
@@ -435,26 +437,35 @@ DEVICE_AND_API_INIT(pl011_port_0,
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 static void pl011_irq_config_func_0(struct device *dev)
 {
-	IRQ_CONNECT(DT_PL011_PORT0_IRQ_TX,
-		    DT_PL011_PORT0_IRQ_PRI,
+#if DT_NUM_IRQS(DT_INST(0, arm_pl011)) == 1
+	IRQ_CONNECT(DT_INST_IRQN(0),
+		    DT_INST_IRQ(0, priority),
 		    pl011_isr,
 		    DEVICE_GET(pl011_port_0),
 		    0);
-	irq_enable(DT_PL011_PORT0_IRQ_TX);
+	irq_enable(DT_INST_IRQN(0));
+#else
+	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(0, tx, irq),
+		    DT_INST_IRQ_BY_NAME(0, tx, priority),
+		    pl011_isr,
+		    DEVICE_GET(pl011_port_0),
+		    0);
+	irq_enable(DT_INST_IRQ_BY_NAME(0, tx, irq));
 
-	IRQ_CONNECT(DT_PL011_PORT0_IRQ_RX,
-		    DT_PL011_PORT0_IRQ_PRI,
+	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(0, rx, irq),
+		    DT_INST_IRQ_BY_NAME(0, rx, priority),
 		    pl011_isr,
 		    DEVICE_GET(pl011_port_0),
 		    0);
-	irq_enable(DT_PL011_PORT0_IRQ_RX);
+	irq_enable(DT_INST_IRQ_BY_NAME(0, rx, irq));
 
-	IRQ_CONNECT(DT_PL011_PORT0_IRQ_RXTIM,
-		    DT_PL011_PORT0_IRQ_PRI,
+	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(0, rxtim, irq),
+		    DT_INST_IRQ_BY_NAME(0, rxtim, priority),
 		    pl011_isr,
 		    DEVICE_GET(pl011_port_0),
 		    0);
-	irq_enable(DT_PL011_PORT0_IRQ_RXTIM);
+	irq_enable(DT_INST_IRQ_BY_NAME(0, rxtim, irq));
+#endif
 }
 #endif
 
@@ -467,19 +478,19 @@ static void pl011_irq_config_func_1(struct device *dev);
 #endif
 
 static struct uart_device_config pl011_cfg_port_1 = {
-	.base = (u8_t *)DT_PL011_PORT1_BASE_ADDRESS,
-	.sys_clk_freq = DT_PL011_PORT1_CLOCK_FREQUENCY,
+	.base = (u8_t *)DT_INST_REG_ADDR(1),
+	.sys_clk_freq = DT_INST_PROP_BY_PHANDLE(1, clocks, clock_frequency),
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	.irq_config_func = pl011_irq_config_func_1,
 #endif
 };
 
 static struct pl011_data pl011_data_port_1 = {
-	.baud_rate = DT_PL011_PORT1_BAUD_RATE,
+	.baud_rate = DT_INST_PROP(1, current_speed),
 };
 
 DEVICE_AND_API_INIT(pl011_port_1,
-		    DT_PL011_PORT1_NAME,
+		    DT_INST_LABEL(1),
 		    &pl011_init,
 		    &pl011_data_port_1,
 		    &pl011_cfg_port_1, PRE_KERNEL_1,
@@ -489,26 +500,35 @@ DEVICE_AND_API_INIT(pl011_port_1,
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 static void pl011_irq_config_func_1(struct device *dev)
 {
-	IRQ_CONNECT(DT_PL011_PORT1_IRQ_TX,
-		    DT_PL011_PORT1_IRQ_PRI,
+#if DT_NUM_IRQS(DT_INST(1, arm_pl011)) == 1
+	IRQ_CONNECT(DT_INST_IRQN(1),
+		    DT_INST_IRQ(1, priority),
 		    pl011_isr,
 		    DEVICE_GET(pl011_port_1),
 		    0);
-	irq_enable(DT_PL011_PORT1_IRQ_TX);
+	irq_enable(DT_INST_IRQN(1));
+#else
+	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(1, tx, irq),
+		    DT_INST_IRQ_BY_NAME(1, tx, priority),
+		    pl011_isr,
+		    DEVICE_GET(pl011_port_1),
+		    0);
+	irq_enable(DT_INST_IRQ_BY_NAME(1, tx, irq));
 
-	IRQ_CONNECT(DT_PL011_PORT1_IRQ_RX,
-		    DT_PL011_PORT1_IRQ_PRI,
+	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(1, rx, irq),
+		    DT_INST_IRQ_BY_NAME(1, rx, priority),
 		    pl011_isr,
 		    DEVICE_GET(pl011_port_1),
 		    0);
-	irq_enable(DT_PL011_PORT1_IRQ_RX);
+	irq_enable(DT_INST_IRQ_BY_NAME(1, rx, irq));
 
-	IRQ_CONNECT(DT_PL011_PORT1_IRQ_RXTIM,
-		    DT_PL011_PORT1_IRQ_PRI,
+	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(1, rxtim, irq),
+		    DT_INST_IRQ_BY_NAME(1, rxtim, priority),
 		    pl011_isr,
 		    DEVICE_GET(pl011_port_1),
 		    0);
-	irq_enable(DT_PL011_PORT1_IRQ_RXTIM);
+	irq_enable(DT_INST_IRQ_BY_NAME(1, rxtim, irq));
+#endif
 }
 #endif
 

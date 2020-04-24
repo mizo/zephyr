@@ -56,10 +56,10 @@ void *xtensa_init_stack(int *stack_top,
 	return &bsa[-9];
 }
 
-void z_arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
-		       size_t sz, k_thread_entry_t entry,
-		       void *p1, void *p2, void *p3,
-		       int prio, unsigned int opts)
+void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
+		     size_t sz, k_thread_entry_t entry,
+		     void *p1, void *p2, void *p3,
+		     int prio, unsigned int opts)
 {
 	char *base = Z_THREAD_STACK_BUFFER(stack);
 	char *top = base + sz;
@@ -67,7 +67,7 @@ void z_arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	/* Align downward.  The API as specified requires a runtime check. */
 	top = (char *)(((unsigned int)top) & ~3);
 
-	z_new_thread_init(thread, base, sz, prio, opts);
+	z_new_thread_init(thread, base, sz);
 
 	thread->switch_handle = xtensa_init_stack((void *)top, entry,
 						  p1, p2, p3);
@@ -194,7 +194,7 @@ void *xtensa_excint1_c(int *interrupted_stack)
 
 		LOG_ERR(" ** FATAL EXCEPTION");
 		LOG_ERR(" ** CPU %d EXCCAUSE %d (%s)",
-			z_arch_curr_cpu()->id, cause,
+			arch_curr_cpu()->id, cause,
 			z_xtensa_exccause(cause));
 		LOG_ERR(" **  PC %p VADDR %p",
 			(void *)bsa[BSA_PC_OFF/4], (void *)vaddr);

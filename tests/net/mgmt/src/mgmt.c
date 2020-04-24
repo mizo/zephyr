@@ -29,7 +29,7 @@ LOG_MODULE_REGISTER(net_test, CONFIG_NET_MGMT_EVENT_LOG_LEVEL);
 /* Notifier infra */
 static u32_t event2throw;
 static u32_t throw_times;
-static int throw_sleep;
+static k_timeout_t throw_sleep;
 static bool with_info;
 static K_THREAD_STACK_DEFINE(thrower_stack, 512 + CONFIG_TEST_EXTRA_STACKSIZE);
 static struct k_thread thrower_thread_data;
@@ -90,7 +90,8 @@ static struct dummy_api fake_iface_api = {
 };
 
 NET_DEVICE_INIT(net_event_test, "net_event_test",
-		fake_dev_init, NULL, NULL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
+		fake_dev_init, device_pm_control_nop,
+		NULL, NULL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
 		&fake_iface_api, DUMMY_L2, NET_L2_GET_CTX_TYPE(DUMMY_L2), 127);
 
 void test_requesting_nm(void)
@@ -247,7 +248,7 @@ static void initialize_event_tests(void)
 	k_thread_create(&thrower_thread_data, thrower_stack,
 			K_THREAD_STACK_SIZEOF(thrower_stack),
 			(k_thread_entry_t)thrower_thread,
-			NULL, NULL, NULL, K_PRIO_COOP(7), 0, 0);
+			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
 }
 
 static int test_core_event(u32_t event, bool (*func)(void))

@@ -6,9 +6,16 @@
 #ifndef ZEPHYR_ARCH_X86_INCLUDE_INTEL64_KERNEL_ARCH_FUNC_H_
 #define ZEPHYR_ARCH_X86_INCLUDE_INTEL64_KERNEL_ARCH_FUNC_H_
 
+#include <kernel_structs.h>
+
 #ifndef _ASMLANGUAGE
 
-extern void z_arch_switch(void *switch_to, void **switched_from);
+extern void z_x86_switch(void *switch_to, void **switched_from);
+
+static inline void arch_switch(void *switch_to, void **switched_from)
+{
+	z_x86_switch(switch_to, switched_from);
+}
 
 /**
  * @brief Initialize scheduler IPI vector.
@@ -18,38 +25,16 @@ extern void z_arch_switch(void *switch_to, void **switched_from);
 
 extern void z_x86_ipi_setup(void);
 
-static inline void z_arch_kernel_init(void)
+static inline void arch_kernel_init(void)
 {
 	/* nothing */;
 }
 
-static inline struct _cpu *z_arch_curr_cpu(void)
-{
-	struct _cpu *cpu;
+FUNC_NORETURN void z_x86_cpu_init(struct x86_cpuboot *cpuboot);
 
-	__asm__ volatile("movq %%gs:(%c1), %0"
-			 : "=r" (cpu)
-			 : "i" (offsetof(x86_tss64_t, cpu)));
+void x86_sse_init(struct k_thread *thread);
 
-	return cpu;
-}
-
-#if defined(CONFIG_SMP)
-
-#include <drivers/interrupt_controller/loapic.h>
-
-/*
- * it is not clear exactly how/where/why to abstract this, as it
- * assumes the use of a local APIC (but there's no other mechanism).
- */
-
-static inline void z_arch_sched_ipi(void)
-{
-	z_loapic_ipi(0, LOAPIC_ICR_IPI_OTHERS, CONFIG_SCHED_IPI_VECTOR);
-}
-
-#endif
-
+void z_x86_syscall_entry_stub(void);
 
 #endif /* _ASMLANGUAGE */
 

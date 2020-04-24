@@ -13,10 +13,10 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(main);
 
-#define LED_DEV_NAME DT_INST_0_HOLTEK_HT16K33_LABEL
-#define KS0_DEV_NAME DT_INST_0_HOLTEK_HT16K33_KEYSCAN_LABEL
-#define KS1_DEV_NAME DT_INST_1_HOLTEK_HT16K33_KEYSCAN_LABEL
-#define KS2_DEV_NAME DT_INST_2_HOLTEK_HT16K33_KEYSCAN_LABEL
+#define LED_DEV_NAME DT_LABEL(DT_INST(0, holtek_ht16k33))
+#define KS0_DEV_NAME DT_LABEL(DT_INST(0, holtek_ht16k33_keyscan))
+#define KS1_DEV_NAME DT_LABEL(DT_INST(1, holtek_ht16k33_keyscan))
+#define KS2_DEV_NAME DT_LABEL(DT_INST(2, holtek_ht16k33_keyscan))
 
 #define KEYSCAN_DEVICES 3
 
@@ -68,20 +68,20 @@ void main(void)
 			"one-by-one");
 		for (i = 0; i < 128; i++) {
 			led_on(led_dev, i);
-			k_sleep(100);
+			k_sleep(K_MSEC(100));
 		}
 
 		for (i = 500; i <= 2000; i *= 2) {
 			LOG_INF("Blinking LEDs with a period of %d ms", i);
 			led_blink(led_dev, 0, i / 2, i / 2);
-			k_sleep(10 * i);
+			k_msleep(10 * i);
 		}
 		led_blink(led_dev, 0, 0, 0);
 
 		for (i = 100; i >= 0; i -= 10) {
 			LOG_INF("Setting LED brightness to %d%%", i);
 			led_set_brightness(led_dev, 0, i);
-			k_sleep(1000);
+			k_sleep(K_MSEC(1000));
 		}
 
 		LOG_INF("Turning all LEDs off and restoring 100%% brightness");

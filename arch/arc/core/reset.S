@@ -16,14 +16,14 @@
 #include <arch/cpu.h>
 #include <swap_macros.h>
 
-GDATA(_interrupt_stack)
+GDATA(z_interrupt_stacks)
 GDATA(z_main_stack)
 GDATA(_VectorTable)
 
 /* use one of the available interrupt stacks during init */
 
 
-#define INIT_STACK _interrupt_stack
+#define INIT_STACK z_interrupt_stacks
 #define INIT_STACK_SIZE CONFIG_ISR_STACK_SIZE
 
 GTEXT(__reset)
@@ -126,7 +126,7 @@ done_cache_invalidate:
         jl @_sys_resume_from_deep_sleep
 #endif
 
-#ifdef CONFIG_SMP
+#if defined(CONFIG_SMP) || CONFIG_MP_NUM_CPUS  > 1
 	_get_cpu_id r0
 	breq r0, 0, _master_core_startup
 
@@ -134,16 +134,20 @@ done_cache_invalidate:
  * Non-masters wait for master core (core 0) to boot enough
  */
 _slave_core_wait:
+#if CONFIG_MP_NUM_CPUS == 1
+	kflag	1
+#endif
 	ld r1, [arc_cpu_wake_flag]
 	brne r0, r1, _slave_core_wait
 
+	ld sp, [arc_cpu_sp]
 	/* signal master core that slave core runs */
 	st 0, [arc_cpu_wake_flag]
 
-	/* get sp set by master core */
-	_get_curr_cpu_irq_stack sp
-
-	j z_arch_slave_start
+#if defined(CONFIG_ARC_FIRQ_STACK)
+	jl z_arc_firq_stack_set
+#endif
+	j z_arc_slave_start
 
 _master_core_startup:
 #endif
@@ -157,7 +161,7 @@ _master_core_startup:
 	mov_s sp, z_main_stack
 	add sp, sp, CONFIG_MAIN_STACK_SIZE
 
-	mov_s r0, _interrupt_stack
+	mov_s r0, z_interrupt_stacks
 	mov_s r1, 0xaa
 	mov_s r2, CONFIG_ISR_STACK_SIZE
 	jl memset
@@ -166,5 +170,9 @@ _master_core_startup:
 
 	mov_s sp, INIT_STACK
 	add sp, sp, INIT_STACK_SIZE
+
+#if defined(CONFIG_ARC_FIRQ_STACK)
+	jl z_arc_firq_stack_set
+#endif
 
 	j @_PrepC

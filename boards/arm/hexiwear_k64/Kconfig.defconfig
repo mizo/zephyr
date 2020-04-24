@@ -1,9 +1,7 @@
-# Kconfig - Hexiwear K64 board
-#
+# Hexiwear K64 board
+
 # Copyright (c) 2016, Freescale Semiconductor, Inc.
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 if BOARD_HEXIWEAR_K64
 
@@ -22,23 +20,13 @@ config MCG_VDIV0
 config MCG_FCRDIV
 	default 1
 
-if UART_MCUX
-
-config UART_MCUX_0
-	default y if UART_CONSOLE
-
-config UART_MCUX_4
-	default y if BT_UART
-
-endif # UART_MCUX
-
 if PINMUX_MCUX
 
 config PINMUX_MCUX_PORTA
 	default y if MAX30101
 
 config PINMUX_MCUX_PORTB
-	default y if UART_MCUX_0
+	default y if "$(dt_nodelabel_enabled,uart0)"
 
 config PINMUX_MCUX_PORTC
 	default y
@@ -47,28 +35,9 @@ config PINMUX_MCUX_PORTD
 	default y
 
 config PINMUX_MCUX_PORTE
-	default y if UART_MCUX_4
+	default y if "$(dt_nodelabel_enabled,uart4)"
 
 endif # PINMUX_MCUX
-
-if GPIO_MCUX
-
-config GPIO_MCUX_PORTA
-	default y if MAX30101
-
-config GPIO_MCUX_PORTB
-	default y
-
-config GPIO_MCUX_PORTC
-	default y
-
-config GPIO_MCUX_PORTD
-	default y
-
-config GPIO_MCUX_PORTE
-	default y
-
-endif # GPIO_MCUX
 
 if I2C
 
@@ -90,12 +59,9 @@ config BATTERY_SENSE
 
 endif # ADC
 
-if PWM_MCUX_FTM
-
 config PWM_3
 	default y
-
-endif # PWM_MCUX_FTM
+	depends on PWM_MCUX_FTM
 
 if SPI
 
@@ -110,11 +76,8 @@ config SPI_2
 
 endif # SPI
 
-if NET_L2_ETHERNET
-
 config ETH_MCUX_0
 	default y
-
-endif # NET_L2_ETHERNET
+	depends on NET_L2_ETHERNET
 
 endif # BOARD_HEXIWEAR_K64

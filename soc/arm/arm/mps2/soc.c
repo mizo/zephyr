@@ -8,17 +8,24 @@
  */
 
 #include <arch/cpu.h>
-#include <gpio/gpio_mmio32.h>
+#include <drivers/gpio/gpio_mmio32.h>
 #include <init.h>
 #include <soc.h>
 
+
 /* Setup GPIO drivers for accessing FPGAIO registers */
-GPIO_MMIO32_INIT(fpgaio_led0, FPGAIO_LED0_GPIO_NAME,
-				&__MPS2_FPGAIO->led0, FPGAIO_LED0_MASK);
-GPIO_MMIO32_INIT(fpgaio_button, FPGAIO_BUTTON_GPIO_NAME,
-				&__MPS2_FPGAIO->button, FPGAIO_BUTTON_MASK);
-GPIO_MMIO32_INIT(fpgaio_misc, FPGAIO_MISC_GPIO_NAME,
-				&__MPS2_FPGAIO->misc, FPGAIO_MISC_MASK);
+#define FPGAIO_NODE(n) DT_INST(n, arm_mps2_fpgaio_gpio)
+#define FPGAIO_INIT(n)						\
+	GPIO_MMIO32_INIT(fpgaio_##n, DT_LABEL(FPGAIO_NODE(n)),	\
+			DT_REG_ADDR(FPGAIO_NODE(n)),		\
+			BIT_MASK(DT_PROP(FPGAIO_NODE(n), ngpios)))
+
+/* We expect there to be 3 arm,mps2-fpgaio-gpio devices:
+ * led0, button, and misc
+ */
+FPGAIO_INIT(0);
+FPGAIO_INIT(1);
+FPGAIO_INIT(2);
 
 /* (Secure System Control) Base Address */
 #define SSE_200_SYSTEM_CTRL_S_BASE	(0x50021000UL)

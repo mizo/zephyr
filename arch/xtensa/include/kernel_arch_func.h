@@ -10,28 +10,13 @@
 #define ZEPHYR_ARCH_XTENSA_INCLUDE_KERNEL_ARCH_FUNC_H_
 
 #ifndef _ASMLANGUAGE
+#include <kernel_internal.h>
+#include <kernel_arch_data.h>
 #include <string.h>
-#include <stdbool.h>
-#include <stddef.h> /* For size_t */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* stack alignment related macros: STACK_ALIGN_SIZE is defined above */
-
-#define STACK_ROUND_UP(x) ROUND_UP(x, STACK_ALIGN_SIZE)
-#define STACK_ROUND_DOWN(x) ROUND_DOWN(x, STACK_ALIGN_SIZE)
-
-#define RSR(sr) \
-	({u32_t v; \
-	 __asm__ volatile ("rsr." sr " %0" : "=a"(v)); \
-	 v; })
-
-#define WSR(sr, v) \
-	do { \
-		__asm__ volatile ("wsr." sr " %0" : : "r"(v)); \
-	} while (false)
 
 extern void FatalErrorHandler(void);
 extern void ReservedInterruptHandler(unsigned int intNo);
@@ -40,34 +25,14 @@ extern void z_xtensa_fatal_error(unsigned int reason, const z_arch_esf_t *esf);
 /* Defined in xtensa_context.S */
 extern void z_xt_coproc_init(void);
 
-extern K_THREAD_STACK_DEFINE(_interrupt_stack, CONFIG_ISR_STACK_SIZE);
+extern K_THREAD_STACK_ARRAY_DEFINE(z_interrupt_stacks, CONFIG_MP_NUM_CPUS,
+				   CONFIG_ISR_STACK_SIZE);
 
-static ALWAYS_INLINE _cpu_t *z_arch_curr_cpu(void)
-{
-	void *val;
-
-	val = (void *)RSR(CONFIG_XTENSA_KERNEL_CPU_PTR_SR);
-
-	return val;
-}
-
-/**
- *
- * @brief Performs architecture-specific initialization
- *
- * This routine performs architecture-specific initialization of the
- * kernel.  Trivial stuff is done inline; more complex initialization is
- * done via function calls.
- *
- * @return N/A
- */
-static ALWAYS_INLINE void z_arch_kernel_init(void)
+static ALWAYS_INLINE void arch_kernel_init(void)
 {
 	_cpu_t *cpu0 = &_kernel.cpus[0];
 
 	cpu0->nested = 0;
-	cpu0->irq_stack = (Z_THREAD_STACK_BUFFER(_interrupt_stack) +
-			   CONFIG_ISR_STACK_SIZE);
 
 	/* The asm2 scheme keeps the kernel pointer in MISC0 for easy
 	 * access.  That saves 4 bytes of immediate value to store the
@@ -78,17 +43,26 @@ static ALWAYS_INLINE void z_arch_kernel_init(void)
 	WSR(CONFIG_XTENSA_KERNEL_CPU_PTR_SR, cpu0);
 
 #ifdef CONFIG_INIT_STACKS
-	memset(Z_THREAD_STACK_BUFFER(_interrupt_stack), 0xAA,
+	memset(Z_THREAD_STACK_BUFFER(z_interrupt_stacks[0]), 0xAA,
 	       CONFIG_ISR_STACK_SIZE);
 #endif
+}
+
+void xtensa_switch(void *switch_to, void **switched_from);
+
+static inline void arch_switch(void *switch_to, void **switched_from)
+{
+	return xtensa_switch(switch_to, switched_from);
 }
 
 #ifdef __cplusplus
 }
 #endif
 
-#define z_arch_is_in_isr() (z_arch_curr_cpu()->nested != 0U)
-
+static inline bool arch_is_in_isr(void)
+{
+	return arch_curr_cpu()->nested != 0U;
+}
 #endif /* _ASMLANGUAGE */
 
 #endif /* ZEPHYR_ARCH_XTENSA_INCLUDE_KERNEL_ARCH_FUNC_H_ */

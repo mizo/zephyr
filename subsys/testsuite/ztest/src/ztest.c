@@ -78,7 +78,7 @@ static void cpu_hold(void *arg1, void *arg2, void *arg3)
 	ARG_UNUSED(arg1);
 	ARG_UNUSED(arg2);
 	ARG_UNUSED(arg3);
-	unsigned int key = z_arch_irq_lock();
+	unsigned int key = arch_irq_lock();
 	u32_t dt, start_ms = k_uptime_get_32();
 
 	k_sem_give(&cpuhold_sem);
@@ -95,10 +95,10 @@ static void cpu_hold(void *arg1, void *arg2, void *arg3)
 	dt = k_uptime_get_32() - start_ms;
 	zassert_true(dt < 3000,
 		     "1cpu test took too long (%d ms)", dt);
-	z_arch_irq_unlock(key);
+	arch_irq_unlock(key);
 }
 
-void z_test_1cpu_start(void)
+void z_impl_z_test_1cpu_start(void)
 {
 	cpuhold_active = 1;
 
@@ -116,7 +116,7 @@ void z_test_1cpu_start(void)
 	}
 }
 
-void z_test_1cpu_stop(void)
+void z_impl_z_test_1cpu_stop(void)
 {
 	cpuhold_active = 0;
 
@@ -125,6 +125,19 @@ void z_test_1cpu_stop(void)
 	}
 }
 
+#ifdef CONFIG_USERSPACE
+void z_vrfy_z_test_1cpu_start(void)
+{
+	z_impl_z_test_1cpu_start();
+}
+#include <syscalls/z_test_1cpu_start_mrsh.c>
+
+void z_vrfy_z_test_1cpu_stop(void)
+{
+	z_impl_z_test_1cpu_stop();
+}
+#include <syscalls/z_test_1cpu_stop_mrsh.c>
+#endif /* CONFIG_USERSPACE */
 #endif
 
 static void run_test_functions(struct unit_test *test)
@@ -133,9 +146,6 @@ static void run_test_functions(struct unit_test *test)
 	test->setup();
 	phase = TEST_PHASE_TEST;
 	test->test();
-	phase = TEST_PHASE_TEARDOWN;
-	test->teardown();
-	phase = TEST_PHASE_FRAMEWORK;
 }
 
 #ifndef KERNEL
@@ -283,7 +293,8 @@ static int run_test(struct unit_test *test)
 			K_THREAD_STACK_SIZEOF(ztest_thread_stack),
 			(k_thread_entry_t) test_cb, (struct unit_test *)test,
 			NULL, NULL, CONFIG_ZTEST_THREAD_PRIORITY,
-			test->thread_options | K_INHERIT_PERMS,	0);
+			test->thread_options | K_INHERIT_PERMS,
+				K_NO_WAIT);
 	/*
 	 * There is an implicit expectation here that the thread that was
 	 * spawned is still higher priority than the current thread.
@@ -298,6 +309,11 @@ static int run_test(struct unit_test *test)
 	 * phase": this will corrupt the kernel ready queue.
 	 */
 	k_sem_take(&test_end_signal, K_FOREVER);
+
+	phase = TEST_PHASE_TEARDOWN;
+	test->teardown();
+	phase = TEST_PHASE_FRAMEWORK;
+
 	if (test_result == -1) {
 		ret = TC_FAIL;
 	}
@@ -411,7 +427,7 @@ void main(void)
 		if (test_status == 0) {
 			PRINT("Reset board #%u to test again\n",
 				state.boots);
-			k_sleep(K_MSEC(10));
+			k_msleep(10);
 			sys_reboot(SYS_REBOOT_COLD);
 		} else {
 			PRINT("Failed after %u attempts\n", state.boots);

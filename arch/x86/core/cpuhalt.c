@@ -4,21 +4,10 @@
  */
 
 #include <zephyr.h>
-#include <debug/tracing.h>
+#include <tracing/tracing.h>
 #include <arch/cpu.h>
 
-/**
- *
- * @brief Power save idle routine
- *
- * This function will be called by the kernel idle loop or possibly within
- * an implementation of _sys_power_save_idle in the kernel when the
- * '_sys_power_save_flag' variable is non-zero.  The 'hlt' instruction
- * will be issued causing a low-power consumption sleep mode.
- *
- * @return N/A
- */
-void z_arch_cpu_idle(void)
+void arch_cpu_idle(void)
 {
 	sys_trace_idle();
 	__asm__ volatile (
@@ -26,25 +15,7 @@ void z_arch_cpu_idle(void)
 	    "hlt\n\t");
 }
 
-/**
- *
- * @brief Atomically re-enable interrupts and enter low power mode
- *
- * INTERNAL
- * The requirements for z_arch_cpu_atomic_idle() are as follows:
- * 1) The enablement of interrupts and entering a low-power mode needs to be
- *    atomic, i.e. there should be no period of time where interrupts are
- *    enabled before the processor enters a low-power mode.  See the comments
- *    in k_lifo_get(), for example, of the race condition that
- *    occurs if this requirement is not met.
- *
- * 2) After waking up from the low-power mode, the interrupt lockout state
- *    must be restored as indicated in the 'key' input parameter.
- *
- * @return N/A
- */
-
-void z_arch_cpu_atomic_idle(unsigned int key)
+void arch_cpu_atomic_idle(unsigned int key)
 {
 	sys_trace_idle();
 
@@ -59,7 +30,7 @@ void z_arch_cpu_atomic_idle(unsigned int key)
 	     *    external, maskable interrupts after the next instruction is
 	     *    executed."
 	     *
-	     * Thus the IA-32 implementation of z_arch_cpu_atomic_idle() will
+	     * Thus the IA-32 implementation of arch_cpu_atomic_idle() will
 	     * atomically re-enable interrupts and enter a low-power mode.
 	     */
 	    "hlt\n\t");

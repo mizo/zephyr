@@ -10,6 +10,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT bosch_bme680
+
 #include "bme680.h"
 #include <drivers/gpio.h>
 #include <drivers/i2c.h>
@@ -348,7 +350,7 @@ static int bme680_chip_init(struct device *dev)
 	}
 
 	if (data->chip_id == BME680_CHIP_ID) {
-		LOG_ERR("BME680 chip detected");
+		LOG_DBG("BME680 chip detected");
 	} else {
 		LOG_ERR("Bad BME680 chip id 0x%x", data->chip_id);
 		return -ENOTSUP;
@@ -401,14 +403,14 @@ static int bme680_init(struct device *dev)
 	struct bme680_data *data = dev->driver_data;
 
 	data->i2c_master = device_get_binding(
-		DT_INST_0_BOSCH_BME680_BUS_NAME);
+		DT_INST_BUS_LABEL(0));
 	if (!data->i2c_master) {
 		LOG_ERR("I2C master not found: %s",
-			    DT_INST_0_BOSCH_BME680_BUS_NAME);
+			    DT_INST_BUS_LABEL(0));
 		return -EINVAL;
 	}
 
-	data->i2c_slave_addr = DT_INST_0_BOSCH_BME680_BASE_ADDRESS;
+	data->i2c_slave_addr = DT_INST_REG_ADDR(0);
 
 	if (bme680_chip_init(dev) < 0) {
 		return -EINVAL;
@@ -424,6 +426,6 @@ static const struct sensor_driver_api bme680_api_funcs = {
 
 static struct bme680_data bme680_data;
 
-DEVICE_AND_API_INIT(bme680, DT_INST_0_BOSCH_BME680_LABEL, bme680_init, &bme680_data,
+DEVICE_AND_API_INIT(bme680, DT_INST_LABEL(0), bme680_init, &bme680_data,
 		    NULL, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &bme680_api_funcs);

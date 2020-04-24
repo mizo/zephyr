@@ -21,12 +21,12 @@
 	leds {
 		compatible = "gpio-leds";
 		red_led_1: led_1 {
-			gpios = <&gpiob 5 GPIO_INT_ACTIVE_HIGH>;
+			gpios = <&gpiob 5 GPIO_ACTIVE_HIGH>;
 			label = "User LD1";
 		};
 
 		red_led_2: led_2 {
-			gpios = <&gpiob 4 GPIO_INT_ACTIVE_HIGH>;
+			gpios = <&gpiob 4 GPIO_ACTIVE_HIGH>;
 			label = "User LD2";
 		};
 	};
@@ -37,7 +37,6 @@
 	};
 };
 
-
 &i2c2 {
 	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
@@ -45,8 +44,6 @@
 
 &usart1 {
 	current-speed = <115200>;
-	pinctrl-0 = <&usart1_pins_a>;
-	pinctrl-names = "default";
 	status = "okay";
 };
 

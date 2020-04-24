@@ -38,19 +38,19 @@ end:
 void main(void)
 {
 	struct device *accelerometer = device_get_binding(
-						DT_INST_0_ST_LIS2DH_LABEL);
+						DT_LABEL(DT_INST(0, st_lis2dh)));
 	struct device *magnetometer = device_get_binding(
-						DT_INST_0_ST_LSM303DLHC_MAGN_LABEL);
+						DT_LABEL(DT_INST(0, st_lsm303dlhc_magn)));
 
 	if (accelerometer == NULL) {
 		printf("Could not get %s device\n",
-				DT_INST_0_ST_LIS2DH_LABEL);
+				DT_LABEL(DT_INST(0, st_lis2dh)));
 		return;
 	}
 
 	if (magnetometer == NULL) {
 		printf("Could not get %s device\n",
-				DT_INST_0_ST_LSM303DLHC_MAGN_LABEL);
+				DT_LABEL(DT_INST(0, st_lsm303dlhc_magn)));
 		return;
 	}
 
@@ -65,6 +65,6 @@ void main(void)
 			printf("Failed to read accelerometer data\n");
 		}
 
-		k_sleep(2000);
+		k_sleep(K_MSEC(2000));
 	}
 }

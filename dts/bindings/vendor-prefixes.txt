@@ -229,6 +229,7 @@ linaro	Linaro Limited
 linksys	Belkin International, Inc. (Linksys)
 linux	Linux-specific binding
 linx	Linx Technologies
+litex	LiteX SoC builder
 lltc	Linear Technology Corporation
 logicpd	Logic PD, Inc.
 lsi	LSI Corp. (LSI Logic)
@@ -298,6 +299,7 @@ onnn	ON Semiconductor Corp.
 ontat	On Tat Industrial Company
 opalkelly	Opal Kelly Incorporated
 opencores	OpenCores.org
+openisa	open-isa.org
 openrisc	OpenRISC.io
 option	Option NV
 oranth	Shenzhen Oranth Technology Co., Ltd.
@@ -438,6 +440,7 @@ virtio	Virtual I/O Device Specification, developed by the OASIS consortium
 vishay	Vishay Intertechnology, Inc
 vitesse	Vitesse Semiconductor Corporation
 vivante	Vivante Corporation
+vnd	A stand-in for a real vendor which can be used in examples and tests
 vocore VoCore Studio
 voipac	Voipac Technologies s.r.o.
 vot	Vision Optical Technology Co., Ltd.

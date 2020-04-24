@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <clock_control/stm32_clock_control.h>
+#include <drivers/clock_control/stm32_clock_control.h>
 #include <drivers/clock_control.h>
 #include <sys/util.h>
 #include <kernel.h>
@@ -39,8 +39,12 @@ int i2c_stm32_runtime_configure(struct device *dev, u32_t config)
 	LL_RCC_GetSystemClocksFreq(&rcc_clocks);
 	clock = rcc_clocks.SYSCLK_Frequency;
 #else
-	clock_control_get_rate(device_get_binding(STM32_CLOCK_CONTROL_NAME),
-			(clock_control_subsys_t *) &cfg->pclken, &clock);
+	if (clock_control_get_rate(device_get_binding(STM32_CLOCK_CONTROL_NAME),
+			(clock_control_subsys_t *) &cfg->pclken, &clock) < 0) {
+		LOG_ERR("Failed call clock_control_get_rate");
+		return -EIO;
+	}
+
 #endif /* CONFIG_SOC_SERIES_STM32F3X) || CONFIG_SOC_SERIES_STM32F0X */
 
 	data->dev_config = config;
@@ -119,7 +123,7 @@ static int i2c_stm32_transfer(struct device *dev, struct i2c_msg *msg,
 			next = current + 1;
 			next_msg_flags = &(next->flags);
 		}
-		while (current->len > 0) {
+		do {
 			u32_t temp_len = current->len;
 			u8_t tmp_msg_flags = current->flags & ~I2C_MSG_RESTART;
 			u8_t tmp_next_msg_flags = next_msg_flags ?
@@ -152,7 +156,7 @@ static int i2c_stm32_transfer(struct device *dev, struct i2c_msg *msg,
 			current->buf += current->len;
 			current->flags = tmp_msg_flags;
 			current->len = temp_len - current->len;
-		}
+		} while (current->len > 0);
 		current++;
 		num_msgs--;
 	}
@@ -204,23 +208,23 @@ static int i2c_stm32_init(struct device *dev)
 	 */
 
 	switch ((u32_t)cfg->i2c) {
-#ifdef CONFIG_I2C_1
-	case DT_I2C_1_BASE_ADDRESS:
+#if DT_HAS_NODE(DT_NODELABEL(i2c1))
+	case DT_REG_ADDR(DT_NODELABEL(i2c1)):
 		LL_RCC_SetI2CClockSource(LL_RCC_I2C1_CLKSOURCE_SYSCLK);
 		break;
-#endif /* CONFIG_I2C_1 */
+#endif
 
-#if defined(CONFIG_SOC_SERIES_STM32F3X) && defined(CONFIG_I2C_2)
-	case DT_I2C_2_BASE_ADDRESS:
+#if defined(CONFIG_SOC_SERIES_STM32F3X) && DT_HAS_NODE(DT_NODELABEL(i2c2))
+	case DT_REG_ADDR(DT_NODELABEL(i2c2)):
 		LL_RCC_SetI2CClockSource(LL_RCC_I2C2_CLKSOURCE_SYSCLK);
 		break;
-#endif /* CONFIG_SOC_SERIES_STM32F3X && CONFIG_I2C_2 */
+#endif
 
-#ifdef CONFIG_I2C_3
-	case DT_I2C_3_BASE_ADDRESS:
+#if DT_HAS_NODE(DT_NODELABEL(i2c3))
+	case DT_REG_ADDR(DT_NODELABEL(i2c3)):
 		LL_RCC_SetI2CClockSource(LL_RCC_I2C3_CLKSOURCE_SYSCLK);
 		break;
-#endif /* CONFIG_I2C_3 */
+#endif
 	}
 #endif /* CONFIG_SOC_SERIES_STM32F3X) || CONFIG_SOC_SERIES_STM32F0X */
 
@@ -242,26 +246,28 @@ static int i2c_stm32_init(struct device *dev)
 #ifdef CONFIG_I2C_STM32_COMBINED_INTERRUPT
 #define STM32_I2C_IRQ_CONNECT_AND_ENABLE(name)				\
 	do {								\
-		IRQ_CONNECT(DT_##name##_COMBINED_IRQ,			\
-			    DT_##name##_COMBINED_IRQ_PRI,		\
+		IRQ_CONNECT(DT_IRQN(DT_NODELABEL(name)),		\
+			    DT_IRQ(DT_NODELABEL(name), priority),	\
 			    stm32_i2c_combined_isr,			\
 			    DEVICE_GET(i2c_stm32_##name), 0);		\
-		irq_enable(DT_##name##_COMBINED_IRQ);			\
+		irq_enable(DT_IRQN(DT_NODELABEL(name)));		\
 	} while (0)
 #else
 #define STM32_I2C_IRQ_CONNECT_AND_ENABLE(name)				\
 	do {								\
-		IRQ_CONNECT(DT_##name##_EVENT_IRQ,			\
-			    DT_##name##_EVENT_IRQ_PRI,			\
+		IRQ_CONNECT(DT_IRQ_BY_NAME(DT_NODELABEL(name), event, irq),\
+			    DT_IRQ_BY_NAME(DT_NODELABEL(name), event,	\
+								priority),\
 			    stm32_i2c_event_isr,			\
 			    DEVICE_GET(i2c_stm32_##name), 0);		\
-		irq_enable(DT_##name##_EVENT_IRQ);			\
+		irq_enable(DT_IRQ_BY_NAME(DT_NODELABEL(name), event, irq));\
 									\
-		IRQ_CONNECT(DT_##name##_ERROR_IRQ,			\
-			    DT_##name##_ERROR_IRQ_PRI,			\
+		IRQ_CONNECT(DT_IRQ_BY_NAME(DT_NODELABEL(name), error, irq),\
+			    DT_IRQ_BY_NAME(DT_NODELABEL(name), error,	\
+								priority),\
 			    stm32_i2c_error_isr,			\
 			    DEVICE_GET(i2c_stm32_##name), 0);		\
-		irq_enable(DT_##name##_ERROR_IRQ);			\
+		irq_enable(DT_IRQ_BY_NAME(DT_NODELABEL(name), error, irq));\
 	} while (0)
 #endif /* CONFIG_I2C_STM32_COMBINED_INTERRUPT */
 
@@ -286,18 +292,18 @@ static void i2c_stm32_irq_config_func_##name(struct device *dev)	\
 STM32_I2C_IRQ_HANDLER_DECL(name);					\
 									\
 static const struct i2c_stm32_config i2c_stm32_cfg_##name = {		\
-	.i2c = (I2C_TypeDef *)DT_##name##_BASE_ADDRESS,			\
+	.i2c = (I2C_TypeDef *)DT_REG_ADDR(DT_NODELABEL(name)),		\
 	.pclken = {							\
-		.enr = DT_##name##_CLOCK_BITS,				\
-		.bus = DT_##name##_CLOCK_BUS,				\
+		.enr = DT_CLOCKS_CELL(DT_NODELABEL(name), bits),	\
+		.bus = DT_CLOCKS_CELL(DT_NODELABEL(name), bus),		\
 	},								\
 	STM32_I2C_IRQ_HANDLER_FUNCTION(name)				\
-	.bitrate = DT_##name##_BITRATE,					\
+	.bitrate = DT_PROP(DT_NODELABEL(name), clock_frequency),	\
 };									\
 									\
 static struct i2c_stm32_data i2c_stm32_dev_data_##name;			\
 									\
-DEVICE_AND_API_INIT(i2c_stm32_##name, CONFIG_##name##_NAME,		\
+DEVICE_AND_API_INIT(i2c_stm32_##name, DT_LABEL(DT_NODELABEL(name)),	\
 		    &i2c_stm32_init, &i2c_stm32_dev_data_##name,	\
 		    &i2c_stm32_cfg_##name,				\
 		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,	\
@@ -307,73 +313,22 @@ STM32_I2C_IRQ_HANDLER(name)
 
 /* I2C instances declaration */
 
-#ifdef CONFIG_I2C_1
-STM32_I2C_INIT(I2C_1);
-#endif /* CONFIG_I2C_1 */
-
-#ifdef CONFIG_I2C_2
-STM32_I2C_INIT(I2C_2);
-#endif /* CONFIG_I2C_2 */
-
-#ifdef CONFIG_I2C_3
-
-#ifndef I2C3_BASE
-#error "I2C_3 is not available on the platform that you selected"
-#endif /* I2C3_BASE */
-
-STM32_I2C_INIT(I2C_3);
-#endif /* CONFIG_I2C_3 */
-
-#ifdef CONFIG_I2C_4
-
-#ifndef I2C4_BASE
-#error "I2C_4 is not available on the platform that you selected"
-#endif /* I2C4_BASE */
-
-STM32_I2C_INIT(I2C_4);
-#endif /* CONFIG_I2C_4 */
-
-
-#ifdef CONFIG_I2C_5
-
-#ifndef I2C5_BASE
-#error "I2C_5 is not available on the platform that you selected"
-#endif /* I2C5_BASE */
-
-#ifdef CONFIG_I2C_STM32_INTERRUPT
-static void i2c_stm32_irq_config_func_5(struct device *port);
+#if DT_HAS_NODE(DT_NODELABEL(i2c1))
+STM32_I2C_INIT(i2c1);
 #endif
 
-static const struct i2c_stm32_config i2c_stm32_cfg_5 = {
-	.i2c = (I2C_TypeDef *)DT_I2C_5_BASE_ADDRESS,
-	.pclken = {
-		.enr = DT_I2C_5_CLOCK_BITS,
-		.bus = DT_I2C_5_CLOCK_BUS,
-	},
-#ifdef CONFIG_I2C_STM32_INTERRUPT
-	.irq_config_func = i2c_stm32_irq_config_func_5,
-#endif
-	.bitrate = DT_I2C_5_BITRATE,
-};
-
-static struct i2c_stm32_data i2c_stm32_dev_data_5;
-
-DEVICE_AND_API_INIT(i2c_stm32_5, CONFIG_I2C_5_NAME, &i2c_stm32_init,
-		    &i2c_stm32_dev_data_5, &i2c_stm32_cfg_5,
-		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
-		    &api_funcs);
-
-#ifdef CONFIG_I2C_STM32_INTERRUPT
-static void i2c_stm32_irq_config_func_5(struct device *dev)
-{
-	IRQ_CONNECT(DT_I2C_5_EVENT_IRQ, DT_I2C_5_EVENT_IRQ_PRI,
-		   stm32_i2c_event_isr, DEVICE_GET(i2c_stm32_5), 0);
-	irq_enable(DT_I2C_5_EVENT_IRQ);
-
-	IRQ_CONNECT(DT_I2C_5_ERROR_IRQ, DT_I2C_5_ERROR_IRQ_PRI,
-		   stm32_i2c_error_isr, DEVICE_GET(i2c_stm32_5), 0);
-	irq_enable(DT_I2C_5_ERROR_IRQ);
-}
+#if DT_HAS_NODE(DT_NODELABEL(i2c2))
+STM32_I2C_INIT(i2c2);
 #endif
 
-#endif /* CONFIG_I2C_5 */
+#if DT_HAS_NODE(DT_NODELABEL(i2c3))
+STM32_I2C_INIT(i2c3);
+#endif
+
+#if DT_HAS_NODE(DT_NODELABEL(i2c4))
+STM32_I2C_INIT(i2c4);
+#endif
+
+#if DT_HAS_NODE(DT_NODELABEL(i2c5))
+STM32_I2C_INIT(i2c5);
+#endif

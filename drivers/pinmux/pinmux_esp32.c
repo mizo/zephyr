@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT espressif_esp32_pinmux
+
 /* Include esp-idf headers first to avoid redefining BIT() macro */
 #include <soc/gpio_reg.h>
 #include <soc/io_mux_reg.h>
@@ -20,6 +22,10 @@
  * this array covers only the first function of each I/O pin.
  * Items with offset `0` are not present in the documentation, and
  * trying to configure them will result in -EINVAL being returned.
+ *
+ * Note: DR_REG_IO_MUX_BASE here is used to extract GPIO_X register offset.
+ *       Don't replace it by device tree value, because PERIPHS_IO_MUX_
+ *       is "internally" depends on it.
  */
 #define PIN(id)   ((PERIPHS_IO_MUX_ ## id ## _U) - (DR_REG_IO_MUX_BASE))
 static const u8_t pin_mux_off[] = {
@@ -49,7 +55,7 @@ static u32_t *reg_for_pin(u32_t pin)
 		return NULL;
 	}
 
-	return (u32_t *)(DR_REG_IO_MUX_BASE + off);
+	return (u32_t *)(DT_INST_REG_ADDR(0) + off);
 }
 
 static int set_reg(u32_t pin, u32_t clr_mask, u32_t set_mask)

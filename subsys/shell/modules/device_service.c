@@ -17,11 +17,18 @@ extern struct device __device_POST_KERNEL_start[];
 extern struct device __device_APPLICATION_start[];
 extern struct device __device_init_end[];
 
+#ifdef CONFIG_SMP
+extern struct device __device_SMP_start[];
+#endif
+
 static struct device *config_levels[] = {
 	__device_PRE_KERNEL_1_start,
 	__device_PRE_KERNEL_2_start,
 	__device_POST_KERNEL_start,
 	__device_APPLICATION_start,
+#ifdef CONFIG_SMP
+	__device_SMP_start,
+#endif
 	/* End marker */
 	__device_init_end,
 };
@@ -86,8 +93,19 @@ static int cmd_device_list(const struct shell *shell,
 	shell_fprintf(shell, SHELL_NORMAL, "devices:\n");
 	for (info = __device_init_start; info != __device_init_end; info++) {
 		if (info->driver_api != NULL) {
-			shell_fprintf(shell, SHELL_NORMAL, "- %s\n",
+			shell_fprintf(shell, SHELL_NORMAL, "- %s",
 					info->config->name);
+#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+			u32_t state = DEVICE_PM_ACTIVE_STATE;
+			int err;
+
+			err = device_get_power_state(info, &state);
+			if (!err) {
+				shell_fprintf(shell, SHELL_NORMAL, " (%s)",
+					      device_pm_state_str(state));
+			}
+#endif /* CONFIG_DEVICE_POWER_MANAGEMENT */
+			shell_fprintf(shell, SHELL_NORMAL, "\n");
 		}
 	}
 

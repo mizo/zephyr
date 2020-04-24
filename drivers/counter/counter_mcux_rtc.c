@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT nxp_kinetis_rtc
+
 #include <drivers/counter.h>
 #include <fsl_rtc.h>
 #include <logging/log.h>
@@ -77,6 +79,12 @@ static u32_t mcux_rtc_read(struct device *dev)
 	ticks = config->base->TSR;
 
 	return ticks;
+}
+
+static int mcux_rtc_get_value(struct device *dev, u32_t *ticks)
+{
+	*ticks = mcux_rtc_read(dev);
+	return 0;
 }
 
 static int mcux_rtc_set_alarm(struct device *dev, u8_t chan_id,
@@ -245,7 +253,7 @@ static int mcux_rtc_init(struct device *dev)
 static const struct counter_driver_api mcux_rtc_driver_api = {
 	.start = mcux_rtc_start,
 	.stop = mcux_rtc_stop,
-	.read = mcux_rtc_read,
+	.get_value = mcux_rtc_get_value,
 	.set_alarm = mcux_rtc_set_alarm,
 	.cancel_alarm = mcux_rtc_cancel_alarm,
 	.set_top_value = mcux_rtc_set_top_value,
@@ -259,25 +267,26 @@ static struct mcux_rtc_data mcux_rtc_data_0;
 static void mcux_rtc_irq_config_0(struct device *dev);
 
 static struct mcux_rtc_config mcux_rtc_config_0 = {
-	.base = (RTC_Type *)DT_RTC_MCUX_0_BASE_ADDRESS,
+	.base = (RTC_Type *)DT_INST_REG_ADDR(0),
 	.irq_config_func = mcux_rtc_irq_config_0,
 	.info = {
 		.max_top_value = UINT32_MAX,
-		.freq = DT_INST_0_NXP_KINETIS_RTC_CLOCK_FREQUENCY /
-				DT_INST_0_NXP_KINETIS_RTC_PRESCALER,
+		.freq = DT_INST_PROP(0, clock_frequency) /
+				DT_INST_PROP(0, prescaler),
 		.flags = COUNTER_CONFIG_INFO_COUNT_UP,
 		.channels = 1,
 	},
 };
 
-DEVICE_AND_API_INIT(rtc, DT_RTC_MCUX_0_NAME, &mcux_rtc_init,
+DEVICE_AND_API_INIT(rtc, DT_INST_LABEL(0), &mcux_rtc_init,
 		    &mcux_rtc_data_0, &mcux_rtc_config_0.info,
 		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 		    &mcux_rtc_driver_api);
 
 static void mcux_rtc_irq_config_0(struct device *dev)
 {
-	IRQ_CONNECT(DT_RTC_MCUX_0_IRQ, DT_RTC_MCUX_0_IRQ_PRI,
+	IRQ_CONNECT(DT_INST_IRQN(0),
+		    DT_INST_IRQ(0, priority),
 		    mcux_rtc_isr, DEVICE_GET(rtc), 0);
-	irq_enable(DT_RTC_MCUX_0_IRQ);
+	irq_enable(DT_INST_IRQN(0));
 }

@@ -203,11 +203,19 @@ struct net_stats_ipv6_mld {
 };
 
 /**
- * @brief Network packet transfer times
+ * @brief Network packet transfer times for calculating average TX time
  */
 struct net_stats_tx_time {
-	u64_t time_sum;
-	net_stats_t time_count;
+	u64_t sum;
+	net_stats_t count;
+};
+
+/**
+ * @brief Network packet receive times for calculating average RX time
+ */
+struct net_stats_rx_time {
+	u64_t sum;
+	net_stats_t count;
 };
 
 /**
@@ -215,18 +223,31 @@ struct net_stats_tx_time {
  */
 struct net_stats_tc {
 	struct {
+		struct net_stats_tx_time tx_time;
 		net_stats_t pkts;
 		net_stats_t bytes;
 		u8_t priority;
-		struct net_stats_tx_time tx_time;
 	} sent[NET_TC_TX_COUNT];
 
 	struct {
+		struct net_stats_rx_time rx_time;
 		net_stats_t pkts;
 		net_stats_t bytes;
 		u8_t priority;
 	} recv[NET_TC_RX_COUNT];
 };
+
+
+/**
+ * @brief Power management statistics
+ */
+struct net_stats_pm {
+	u64_t overall_suspend_time;
+	net_stats_t suspend_count;
+	u32_t last_suspend_time;
+	u32_t start_time;
+};
+
 
 /**
  * @brief All network statistics in one struct.
@@ -284,9 +305,24 @@ struct net_stats {
 	struct net_stats_tc tc;
 #endif
 
-#if defined(CONFIG_NET_CONTEXT_TIMESTAMP)
+#if defined(CONFIG_NET_CONTEXT_TIMESTAMP) && \
+	defined(CONFIG_NET_PKT_TXTIME_STATS)
+#error \
+"Cannot define both CONFIG_NET_CONTEXT_TIMESTAMP and CONFIG_NET_PKT_TXTIME_STATS"
+#endif
+#if defined(CONFIG_NET_CONTEXT_TIMESTAMP) || \
+					defined(CONFIG_NET_PKT_TXTIME_STATS)
 	/** Network packet TX time statistics */
 	struct net_stats_tx_time tx_time;
+#endif
+
+#if defined(CONFIG_NET_PKT_RXTIME_STATS)
+	/** Network packet RX time statistics */
+	struct net_stats_rx_time rx_time;
+#endif
+
+#if defined(CONFIG_NET_STATISTICS_POWER_MANAGEMENT)
+	struct net_stats_pm pm;
 #endif
 };
 
@@ -412,6 +448,7 @@ enum net_request_stats_cmd {
 	NET_REQUEST_STATS_CMD_GET_TCP,
 	NET_REQUEST_STATS_CMD_GET_ETHERNET,
 	NET_REQUEST_STATS_CMD_GET_PPP,
+	NET_REQUEST_STATS_CMD_GET_PM
 };
 
 #define NET_REQUEST_STATS_GET_ALL				\
@@ -491,6 +528,13 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_GET_PPP);
 #endif /* CONFIG_NET_STATISTICS_PPP */
 
 #endif /* CONFIG_NET_STATISTICS_USER_API */
+
+#if defined(CONFIG_NET_STATISTICS_POWER_MANAGEMENT)
+#define NET_REQUEST_STATS_GET_PM				\
+	(_NET_STATS_BASE | NET_REQUEST_STATS_CMD_GET_PM)
+
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_STATS_GET_PM);
+#endif /* CONFIG_NET_STATISTICS_POWER_MANAGEMENT */
 
 /**
  * @}

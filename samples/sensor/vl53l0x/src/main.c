@@ -12,7 +12,7 @@
 
 void main(void)
 {
-	struct device *dev = device_get_binding(DT_INST_0_ST_VL53L0X_LABEL);
+	struct device *dev = device_get_binding(DT_LABEL(DT_INST(0, st_vl53l0x)));
 	struct sensor_value value;
 	int ret;
 
@@ -36,6 +36,6 @@ void main(void)
 					 &value);
 		printf("distance is %.3fm\n", sensor_value_to_double(&value));
 
-		k_sleep(1000);
+		k_sleep(K_MSEC(1000));
 	}
 }

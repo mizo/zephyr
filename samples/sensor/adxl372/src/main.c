@@ -47,10 +47,10 @@ void main(void)
 	int i;
 	char meter[200];
 
-	struct device *dev = device_get_binding(DT_INST_0_ADI_ADXL372_LABEL);
+	struct device *dev = device_get_binding(DT_LABEL(DT_INST(0, adi_adxl372)));
 
 	if (dev == NULL) {
-		printf("Could not get %s device\n", DT_INST_0_ADI_ADXL372_LABEL);
+		printf("Could not get %s device\n", DT_LABEL(DT_INST(0, adi_adxl372)));
 		return;
 	}
 
@@ -104,7 +104,7 @@ void main(void)
 		}
 
 		if (!IS_ENABLED(CONFIG_ADXL372_TRIGGER)) {
-			k_sleep(2000);
+			k_sleep(K_MSEC(2000));
 		}
 	}
 }

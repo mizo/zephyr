@@ -111,7 +111,7 @@ static int do_net_init(void)
 	}
 
 	if (IS_ENABLED(CONFIG_NET_HOSTNAME_ENABLE)) {
-		(void)memcpy(hostname, net_hostname_get(), MAX_HOSTNAME_LEN);
+		(void)strncpy(hostname, net_hostname_get(), MAX_HOSTNAME_LEN);
 
 	} else if (IS_ENABLED(CONFIG_NET_IPV6) &&
 		   server_addr.sa_family == AF_INET6) {
@@ -185,7 +185,9 @@ static void send_output(const struct log_backend *const backend,
 
 	log_output_msg_process(&log_output, msg,
 			       LOG_OUTPUT_FLAG_FORMAT_SYSLOG |
-			       LOG_OUTPUT_FLAG_TIMESTAMP);
+			       LOG_OUTPUT_FLAG_TIMESTAMP |
+			(IS_ENABLED(CONFIG_LOG_BACKEND_NET_SYST_ENABLE) ?
+			LOG_OUTPUT_FLAG_FORMAT_SYST : 0));
 
 	log_msg_put(msg);
 }
@@ -217,7 +219,9 @@ static void sync_string(const struct log_backend *const backend,
 		     const char *fmt, va_list ap)
 {
 	u32_t flags = LOG_OUTPUT_FLAG_LEVEL | LOG_OUTPUT_FLAG_FORMAT_SYSLOG |
-		LOG_OUTPUT_FLAG_TIMESTAMP;
+		LOG_OUTPUT_FLAG_TIMESTAMP |
+		(IS_ENABLED(CONFIG_LOG_BACKEND_NET_SYST_ENABLE) ?
+		LOG_OUTPUT_FLAG_FORMAT_SYST : 0);
 	u32_t key;
 
 	if (!net_init_done && do_net_init() == 0) {

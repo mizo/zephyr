@@ -58,6 +58,12 @@ enum net_context_state {
 /** Remote address set */
 #define NET_CONTEXT_REMOTE_ADDR_SET  BIT(8)
 
+/** Is the socket accepting connections */
+#define NET_CONTEXT_ACCEPTING_SOCK  BIT(9)
+
+/** Is the socket closing / closed */
+#define NET_CONTEXT_CLOSING_SOCK  BIT(10)
+
 struct net_context;
 
 /**
@@ -244,10 +250,15 @@ struct net_context {
 	net_pkt_get_pool_func_t data_pool;
 #endif /* CONFIG_NET_CONTEXT_NET_PKT_POOL */
 
-#if defined(CONFIG_NET_TCP)
+#if defined(CONFIG_NET_TCP1)
 	/** TCP connection information */
 	struct net_tcp *tcp;
-#endif /* CONFIG_NET_TCP */
+#endif /* CONFIG_NET_TCP1 */
+
+#if defined(CONFIG_NET_TCP2)
+	/** TCP connection information */
+	void *tcp;
+#endif /* CONFIG_NET_TCP2 */
 
 #if defined(CONFIG_NET_CONTEXT_SYNC_RECV)
 	/**
@@ -327,6 +338,70 @@ static inline bool net_context_is_used(struct net_context *context)
 	NET_ASSERT(context);
 
 	return context->flags & NET_CONTEXT_IN_USE;
+}
+
+/**
+ * @brief Is this context is accepting data now.
+ *
+ * @param context Network context.
+ *
+ * @return True if the context is accepting connections, False otherwise.
+ */
+static inline bool net_context_is_accepting(struct net_context *context)
+{
+	NET_ASSERT(context);
+
+	return context->flags & NET_CONTEXT_ACCEPTING_SOCK;
+}
+
+/**
+ * @brief Set this context to accept data now.
+ *
+ * @param context Network context.
+ * @param accepting True if accepting, False if not
+ */
+static inline void net_context_set_accepting(struct net_context *context,
+					     bool accepting)
+{
+	NET_ASSERT(context);
+
+	if (accepting) {
+		context->flags |= NET_CONTEXT_ACCEPTING_SOCK;
+	} else {
+		context->flags &= ~NET_CONTEXT_ACCEPTING_SOCK;
+	}
+}
+
+/**
+ * @brief Is this context closing.
+ *
+ * @param context Network context.
+ *
+ * @return True if the context is closing, False otherwise.
+ */
+static inline bool net_context_is_closing(struct net_context *context)
+{
+	NET_ASSERT(context);
+
+	return context->flags & NET_CONTEXT_CLOSING_SOCK;
+}
+
+/**
+ * @brief Set this context to closing.
+ *
+ * @param context Network context.
+ * @param closing True if closing, False if not
+ */
+static inline void net_context_set_closing(struct net_context *context,
+					   bool closing)
+{
+	NET_ASSERT(context);
+
+	if (closing) {
+		context->flags |= NET_CONTEXT_CLOSING_SOCK;
+	} else {
+		context->flags &= ~NET_CONTEXT_CLOSING_SOCK;
+	}
 }
 
 #define NET_CONTEXT_STATE_SHIFT 1
@@ -791,7 +866,7 @@ int net_context_connect(struct net_context *context,
 			const struct sockaddr *addr,
 			socklen_t addrlen,
 			net_context_connect_cb_t cb,
-			s32_t timeout,
+			k_timeout_t timeout,
 			void *user_data);
 
 /**
@@ -821,7 +896,7 @@ int net_context_connect(struct net_context *context,
  */
 int net_context_accept(struct net_context *context,
 		       net_tcp_accept_cb_t cb,
-		       s32_t timeout,
+		       k_timeout_t timeout,
 		       void *user_data);
 
 /**
@@ -847,7 +922,7 @@ int net_context_send(struct net_context *context,
 		     const void *buf,
 		     size_t len,
 		     net_context_send_cb_t cb,
-		     s32_t timeout,
+		     k_timeout_t timeout,
 		     void *user_data);
 
 /**
@@ -877,7 +952,7 @@ int net_context_sendto(struct net_context *context,
 		       const struct sockaddr *dst_addr,
 		       socklen_t addrlen,
 		       net_context_send_cb_t cb,
-		       s32_t timeout,
+		       k_timeout_t timeout,
 		       void *user_data);
 
 /**
@@ -902,7 +977,7 @@ int net_context_sendmsg(struct net_context *context,
 			const struct msghdr *msghdr,
 			int flags,
 			net_context_send_cb_t cb,
-			s32_t timeout,
+			k_timeout_t timeout,
 			void *user_data);
 
 /**
@@ -943,7 +1018,7 @@ int net_context_sendmsg(struct net_context *context,
  */
 int net_context_recv(struct net_context *context,
 		     net_context_recv_cb_t cb,
-		     s32_t timeout,
+		     k_timeout_t timeout,
 		     void *user_data);
 
 /**

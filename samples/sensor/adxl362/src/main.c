@@ -33,7 +33,7 @@ void main(void)
 {
 	struct sensor_value accel[3];
 
-	struct device *dev = device_get_binding(DT_INST_0_ADI_ADXL362_LABEL);
+	struct device *dev = device_get_binding(DT_LABEL(DT_INST(0, adi_adxl362)));
 	if (dev == NULL) {
 		printf("Device get binding device\n");
 		return;
@@ -58,7 +58,7 @@ void main(void)
 		if (IS_ENABLED(CONFIG_ADXL362_TRIGGER)) {
 			k_sem_take(&sem, K_FOREVER);
 		} else {
-			k_sleep(1000);
+			k_sleep(K_MSEC(1000));
 			if (sensor_sample_fetch(dev) < 0) {
 				printf("Sample fetch error\n");
 				return;

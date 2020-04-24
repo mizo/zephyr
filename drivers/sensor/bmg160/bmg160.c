@@ -8,6 +8,8 @@
  * http://ae-bst.resource.bosch.com/media/_tech/media/datasheets/BST-BMG160-DS000-09.pdf
  */
 
+#define DT_DRV_COMPAT bosch_bmg160
+
 #include <init.h>
 #include <drivers/sensor.h>
 #include <sys/byteorder.h>
@@ -16,8 +18,7 @@
 
 #include "bmg160.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_REGISTER(BMG160);
+LOG_MODULE_REGISTER(BMG160, CONFIG_SENSOR_LOG_LEVEL);
 
 struct bmg160_device_data bmg160_data;
 
@@ -329,15 +330,17 @@ int bmg160_init(struct device *dev)
 }
 
 const struct bmg160_device_config bmg160_config = {
-	.i2c_port = CONFIG_BMG160_I2C_PORT_NAME,
-	.i2c_addr = CONFIG_BMG160_I2C_ADDR,
+	.i2c_port = DT_INST_BUS_LABEL(0),
+	.i2c_addr = DT_INST_REG_ADDR(0),
 	.i2c_speed = BMG160_BUS_SPEED,
 #ifdef CONFIG_BMG160_TRIGGER
-	.gpio_port = CONFIG_BMG160_GPIO_PORT_NAME,
-	.int_pin = CONFIG_BMG160_INT_PIN,
+	.int_pin = DT_INST_GPIO_PIN(0, int_gpios),
+	.int_flags = DT_INST_GPIO_FLAGS(0, int_gpios),
+	.gpio_port = DT_INST_GPIO_LABEL(0, int_gpios),
 #endif
 };
 
-DEVICE_AND_API_INIT(bmg160, CONFIG_BMG160_DRV_NAME, bmg160_init, &bmg160_data,
+DEVICE_AND_API_INIT(bmg160, DT_INST_LABEL(0), bmg160_init,
+		    &bmg160_data,
 		    &bmg160_config, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &bmg160_api);

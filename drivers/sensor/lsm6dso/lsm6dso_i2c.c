@@ -8,16 +8,17 @@
  * https://www.st.com/resource/en/datasheet/lsm6dso.pdf
  */
 
+#define DT_DRV_COMPAT st_lsm6dso
+
 #include <string.h>
 #include <drivers/i2c.h>
 #include <logging/log.h>
 
 #include "lsm6dso.h"
 
-#ifdef DT_ST_LSM6DSO_BUS_I2C
+#if DT_ANY_INST_ON_BUS(i2c)
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_DECLARE(LSM6DSO);
+LOG_MODULE_DECLARE(LSM6DSO, CONFIG_SENSOR_LOG_LEVEL);
 
 static int lsm6dso_i2c_read(struct device *dev, u8_t reg_addr,
 			    u8_t *value, u8_t len)
@@ -43,12 +44,12 @@ int lsm6dso_i2c_init(struct device *dev)
 {
 	struct lsm6dso_data *data = dev->driver_data;
 
-	data->ctx_i2c.read_reg = (lsm6dso_read_ptr) lsm6dso_i2c_read,
-	data->ctx_i2c.write_reg = (lsm6dso_write_ptr) lsm6dso_i2c_write,
+	data->ctx_i2c.read_reg = (stmdev_read_ptr) lsm6dso_i2c_read,
+	data->ctx_i2c.write_reg = (stmdev_write_ptr) lsm6dso_i2c_write,
 
 	data->ctx = &data->ctx_i2c;
 	data->ctx->handle = dev;
 
 	return 0;
 }
-#endif /* DT_ST_LSM6DSO_BUS_I2C */
+#endif /* DT_ANY_INST_ON_BUS(i2c) */

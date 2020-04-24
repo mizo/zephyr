@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2019 Intel Corporation.
  *
@@ -13,7 +12,7 @@
 #ifndef ZEPHYR_INCLUDE_ESPI_H_
 #define ZEPHYR_INCLUDE_ESPI_H_
 
-#include <misc/__assert.h>
+#include <sys/__assert.h>
 #include <zephyr/types.h>
 #include <device.h>
 
@@ -90,7 +89,7 @@ enum espi_io_mode {
  * @brief eSPI channel.
  *
  * Identifies each eSPI logical channel supported by eSPI controller
- * Each channel allows idependent traffic, but the assignment of channel
+ * Each channel allows independent traffic, but the assignment of channel
  * type to channel number is fixed.
  *
  * Note that generic commands are not associated with any channel, so traffic
@@ -135,6 +134,9 @@ enum espi_bus_event {
 
 #define ESPI_PERIPHERAL_NODATA   0ul
 
+#define E8042_START_OPCODE      0x50
+#define E8042_MAX_OPCODE        0x5F
+
 /** @endcond */
 
 /**
@@ -145,7 +147,7 @@ enum espi_bus_event {
  */
 enum espi_virtual_peripheral {
 	ESPI_PERIPHERAL_UART,
-	ESPI_PERIPHERAL_8042_KEYBOARD,
+	ESPI_PERIPHERAL_8042_KBC,
 	ESPI_PERIPHERAL_HOST_IO,
 	ESPI_PERIPHERAL_DEBUG_PORT80
 };
@@ -203,6 +205,20 @@ enum espi_vwire_signal {
 	ESPI_VWIRE_SIGNAL_SCI,
 	ESPI_VWIRE_SIGNAL_DNX_ACK,
 	ESPI_VWIRE_SIGNAL_SUS_ACK,
+};
+
+/* eSPI LPC peripherals. */
+enum lpc_peripheral_opcode {
+	/* Read transactions */
+	E8042_OBF_HAS_CHAR = 0x50,
+	E8042_IBF_HAS_CHAR,
+	/* Write transactions */
+	E8042_WRITE_KB_CHAR,
+	E8042_WRITE_MB_CHAR,
+	/* Write transactions without input parameters */
+	E8042_RESUME_IRQ,
+	E8042_PAUSE_IRQ,
+	E8042_CLEAR_OBF,
 };
 
 /**
@@ -310,9 +326,13 @@ typedef bool (*espi_api_get_channel_status)(struct device *dev,
 					    enum espi_channel ch);
 /* Logical Channel 0 APIs */
 typedef int (*espi_api_read_request)(struct device *dev,
-				     struct espi_request_packet);
+				     struct espi_request_packet *req);
 typedef int (*espi_api_write_request)(struct device *dev,
-				      struct espi_request_packet);
+				      struct espi_request_packet *req);
+typedef int (*espi_api_lpc_read_request)(struct device *dev,
+				enum lpc_peripheral_opcode op, u32_t *data);
+typedef int (*espi_api_lpc_write_request)(struct device *dev,
+				enum lpc_peripheral_opcode op, u32_t *data);
 /* Logical Channel 1 APIs */
 typedef int (*espi_api_send_vwire)(struct device *dev,
 				   enum espi_vwire_signal vw,
@@ -322,26 +342,28 @@ typedef int (*espi_api_receive_vwire)(struct device *dev,
 				      u8_t *level);
 /* Logical Channel 2 APIs */
 typedef int (*espi_api_send_oob)(struct device *dev,
-				 struct espi_oob_packet);
+				 struct espi_oob_packet *pckt);
 typedef int (*espi_api_receive_oob)(struct device *dev,
-				    struct espi_oob_packet);
+				    struct espi_oob_packet *pckt);
 /* Logical Channel 3 APIs */
 typedef int (*espi_api_flash_read)(struct device *dev,
-				   struct espi_flash_packet);
+				   struct espi_flash_packet *pckt);
 typedef int (*espi_api_flash_write)(struct device *dev,
-				    struct espi_flash_packet);
+				    struct espi_flash_packet *pckt);
 typedef int (*espi_api_flash_erase)(struct device *dev,
-				    struct espi_flash_packet);
+				    struct espi_flash_packet *pckt);
 /* Callbacks and traffic intercept */
 typedef int (*espi_api_manage_callback)(struct device *dev,
 					struct espi_callback *callback,
 					bool set);
 
-struct espi_driver_api {
+__subsystem struct espi_driver_api {
 	espi_api_config config;
-	espi_api_get_channel_status  get_channel_status;
+	espi_api_get_channel_status get_channel_status;
 	espi_api_read_request read_request;
 	espi_api_write_request write_request;
+	espi_api_lpc_read_request read_lpc_request;
+	espi_api_lpc_write_request write_lpc_request;
 	espi_api_send_vwire send_vwire;
 	espi_api_receive_vwire receive_vwire;
 	espi_api_send_oob send_oob;
@@ -443,7 +465,8 @@ static inline bool z_impl_espi_get_channel_status(struct device *dev,
  * This routines provides a generic interface to send a read request packet.
  *
  * @param dev Pointer to the device structure for the driver instance.
- * @param req Structure representing a memory, I/O or message read request.
+ * @param req Address of structure representing a memory,
+ *            I/O or message read request.
  *
  * @retval 0 If successful.
  * @retval -ENOTSUP if eSPI controller doesn't support raw packets and instead
@@ -451,10 +474,10 @@ static inline bool z_impl_espi_get_channel_status(struct device *dev,
  * @retval -EIO General input / output error, failed to send over the bus.
  */
 __syscall int espi_read_request(struct device *dev,
-				struct espi_request_packet req);
+				struct espi_request_packet *req);
 
 static inline int z_impl_espi_read_request(struct device *dev,
-					   struct espi_request_packet req)
+					   struct espi_request_packet *req)
 {
 	const struct espi_driver_api *api =
 		(const struct espi_driver_api *)dev->driver_api;
@@ -472,18 +495,19 @@ static inline int z_impl_espi_read_request(struct device *dev,
  * This routines provides a generic interface to send a write request packet.
  *
  * @param dev Pointer to the device structure for the driver instance.
- * @param req Structure representing a memory, I/O or message write request.
+ * @param req Address of structure representing a memory, I/O or
+ *            message write request.
  *
  * @retval 0 If successful.
  * @retval -ENOTSUP if eSPI controller doesn't support raw packets and instead
  *         low memory transactions are handled by controller hardware directly.
- * @retval -EIO General input / output error, failed to send over the bus.
+ * @retval -EINVAL General input / output error, failed to send over the bus.
  */
 __syscall int espi_write_request(struct device *dev,
-				 struct espi_request_packet req);
+				 struct espi_request_packet *req);
 
 static inline int z_impl_espi_write_request(struct device *dev,
-					    struct espi_request_packet req)
+					    struct espi_request_packet *req)
 {
 	const struct espi_driver_api *api =
 		(const struct espi_driver_api *)dev->driver_api;
@@ -493,6 +517,72 @@ static inline int z_impl_espi_write_request(struct device *dev,
 	}
 
 	return api->write_request(dev, req);
+}
+
+/**
+ * @brief Reads SOC data from a LPC peripheral with information
+ * updated over eSPI.
+ *
+ * This routine provides a generic interface to read a block whose
+ * information was updated by an eSPI transaction. Reading may trigger
+ * a transaction. The eSPI packet is assembled by the HW block.
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ * @param op Enum representing opcode for peripheral type and read request.
+ * @param data Parameter to be read from to the LPC peripheral.
+ *
+ * @retval 0 If successful.
+ * @retval -ENOTSUP if eSPI peripheral is off or not supported.
+ * @retval -EINVAL for unimplemented lpc opcode, but in range.
+ */
+__syscall int espi_read_lpc_request(struct device *dev,
+				enum lpc_peripheral_opcode op, u32_t *data);
+
+static inline int z_impl_espi_read_lpc_request(struct device *dev,
+					       enum lpc_peripheral_opcode op,
+					       u32_t *data)
+{
+	const struct espi_driver_api *api =
+		(const struct espi_driver_api *)dev->driver_api;
+
+	if (!api->read_lpc_request) {
+		return -ENOTSUP;
+	}
+
+	return api->read_lpc_request(dev, op, data);
+}
+
+/**
+ * @brief Writes data to a LPC peripheral which generates an eSPI transaction.
+ *
+ * This routine provides a generic interface to write data to a block which
+ * triggers an eSPI transaction. The eSPI packet is assembled by the HW
+ * block.
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ * @param op Enum representing an opcode for peripheral type and write request.
+ * @param data Represents the parameter passed to the LPC peripheral.
+ *
+ * @retval 0 If successful.
+ * @retval -ENOTSUP if eSPI peripheral is off or not supported.
+ * @retval -EINVAL for unimplemented lpc opcode, but in range.
+ */
+__syscall int espi_write_lpc_request(struct device *dev,
+				     enum lpc_peripheral_opcode op,
+				     u32_t *data);
+
+static inline int z_impl_espi_write_lpc_request(struct device *dev,
+						enum lpc_peripheral_opcode op,
+						u32_t *data)
+{
+	const struct espi_driver_api *api =
+		(const struct espi_driver_api *)dev->driver_api;
+
+	if (!api->write_lpc_request) {
+		return -ENOTSUP;
+	}
+
+	return api->write_lpc_request(dev, op, data);
 }
 
 /**
@@ -555,14 +645,14 @@ static inline int z_impl_espi_receive_vwire(struct device *dev,
  * and send into packet over eSPI bus
  *
  * @param dev Pointer to the device structure for the driver instance.
- * @param pckt the packet representation of SMBus transaction.
+ * @param pckt Address of the packet representation of SMBus transaction.
  *
  * @retval -EIO General input / output error, failed request to master.
  */
-__syscall int espi_send_oob(struct device *dev, struct espi_oob_packet pckt);
+__syscall int espi_send_oob(struct device *dev, struct espi_oob_packet *pckt);
 
 static inline int z_impl_espi_send_oob(struct device *dev,
-				       struct espi_oob_packet pckt)
+				       struct espi_oob_packet *pckt)
 {
 	const struct espi_driver_api *api =
 		(const struct espi_driver_api *)dev->driver_api;
@@ -581,15 +671,15 @@ static inline int z_impl_espi_send_oob(struct device *dev,
  * transaction from eSPI bus
  *
  * @param dev Pointer to the device structure for the driver instance.
- * @param pckt the packet representation of SMBus transaction.
+ * @param pckt Address of the packet representation of SMBus transaction.
  *
  * @retval -EIO General input / output error, failed request to master.
  */
 __syscall int espi_receive_oob(struct device *dev,
-			       struct espi_oob_packet pckt);
+			       struct espi_oob_packet *pckt);
 
 static inline int z_impl_espi_receive_oob(struct device *dev,
-					  struct espi_oob_packet pckt)
+					  struct espi_oob_packet *pckt)
 {
 	const struct espi_driver_api *api =
 		(const struct espi_driver_api *)dev->driver_api;
@@ -608,17 +698,17 @@ static inline int z_impl_espi_receive_oob(struct device *dev,
  * component shared between the eSPI master and eSPI slaves.
  *
  * @param dev Pointer to the device structure for the driver instance.
- * @param pckt the representation of read flash transaction.
+ * @param pckt Adddress of the representation of read flash transaction.
  *
  * @retval -ENOTSUP eSPI flash logical channel transactions not supported.
  * @retval -EBUSY eSPI flash channel is not ready or disabled by master.
  * @retval -EIO General input / output error, failed request to master.
  */
 __syscall int espi_read_flash(struct device *dev,
-			      struct espi_flash_packet pckt);
+			      struct espi_flash_packet *pckt);
 
-static inline int z_impl_espi_flash_read(struct device *dev,
-					 struct espi_flash_packet pckt)
+static inline int z_impl_espi_read_flash(struct device *dev,
+					 struct espi_flash_packet *pckt)
 {
 	const struct espi_driver_api *api =
 		(const struct espi_driver_api *)dev->driver_api;
@@ -637,17 +727,17 @@ static inline int z_impl_espi_flash_read(struct device *dev,
  * components shared between the eSPI master and eSPI slaves.
  *
  * @param dev Pointer to the device structure for the driver instance.
- * @param pckt the representation of write flash transaction.
+ * @param pckt Address of the representation of write flash transaction.
  *
  * @retval -ENOTSUP eSPI flash logical channel transactions not supported.
  * @retval -EBUSY eSPI flash channel is not ready or disabled by master.
  * @retval -EIO General input / output error, failed request to master.
  */
 __syscall int espi_write_flash(struct device *dev,
-			       struct espi_flash_packet pckt);
+			       struct espi_flash_packet *pckt);
 
-static inline int z_impl_espi_flash_write(struct device *dev,
-					  struct espi_flash_packet pckt)
+static inline int z_impl_espi_write_flash(struct device *dev,
+					  struct espi_flash_packet *pckt)
 {
 	const struct espi_driver_api *api =
 		(const struct espi_driver_api *)dev->driver_api;
@@ -666,17 +756,17 @@ static inline int z_impl_espi_flash_write(struct device *dev,
  * components shared between the eSPI master and eSPI slaves.
  *
  * @param dev Pointer to the device structure for the driver instance.
- * @param pckt the representation of write flash transaction.
+ * @param pckt Address of the representation of write flash transaction.
  *
  * @retval -ENOTSUP eSPI flash logical channel transactions not supported.
  * @retval -EBUSY eSPI flash channel is not ready or disabled by master.
  * @retval -EIO General input / output error, failed request to master.
  */
 __syscall int espi_flash_erase(struct device *dev,
-			       struct espi_flash_packet pckt);
+			       struct espi_flash_packet *pckt);
 
 static inline int z_impl_espi_flash_erase(struct device *dev,
-					  struct espi_flash_packet pckt)
+					  struct espi_flash_packet *pckt)
 {
 	const struct espi_driver_api *api =
 		(const struct espi_driver_api *)dev->driver_api;

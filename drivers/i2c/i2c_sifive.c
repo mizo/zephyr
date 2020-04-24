@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT sifive_i2c0
+
 #define LOG_LEVEL CONFIG_I2C_LOG_LEVEL
 #include <logging/log.h>
 LOG_MODULE_REGISTER(i2c_sifive);
@@ -332,12 +334,12 @@ static struct i2c_driver_api i2c_sifive_api = {
 
 #define I2C_SIFIVE_INIT(n) \
 	static struct i2c_sifive_cfg i2c_sifive_cfg_##n = { \
-		.base = DT_SIFIVE_I2C0_##n##_BASE_ADDRESS, \
-		.f_sys = DT_SIFIVE_I2C0_##n##_INPUT_FREQUENCY, \
-		.f_bus = DT_SIFIVE_I2C0_##n##_CLOCK_FREQUENCY, \
+		.base = DT_INST_REG_ADDR(n), \
+		.f_sys = DT_INST_PROP(n, input_frequency), \
+		.f_bus = DT_INST_PROP(n, clock_frequency), \
 	}; \
 	DEVICE_AND_API_INIT(i2c_##n, \
-			    DT_SIFIVE_I2C0_##n##_LABEL, \
+			    DT_INST_LABEL(n), \
 			    i2c_sifive_init, \
 			    NULL, \
 			    &i2c_sifive_cfg_##n, \
@@ -345,7 +347,6 @@ static struct i2c_driver_api i2c_sifive_api = {
 			    CONFIG_I2C_INIT_PRIORITY, \
 			    &i2c_sifive_api)
 
-#ifdef DT_INST_0_SIFIVE_I2C0_LABEL
+#if DT_HAS_DRV_INST(0)
 I2C_SIFIVE_INIT(0);
 #endif
-

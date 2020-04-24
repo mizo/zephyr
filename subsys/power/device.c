@@ -22,15 +22,23 @@ LOG_MODULE_DECLARE(power);
  * to build the device list based on devices power
  * and clock domain dependencies.
  */
-#if defined(CONFIG_SOC_SERIES_NRF52X) || defined(CONFIG_SOC_SERIES_NRF51X)
+#if defined(CONFIG_SOC_FAMILY_NRF)
 #define MAX_PM_DEVICES	15
-#define NUM_CORE_DEVICES	4
-#define MAX_DEV_NAME_LEN	16
-static const char core_devices[NUM_CORE_DEVICES][MAX_DEV_NAME_LEN] = {
-	"CLOCK_32K",
-	"CLOCK_16M",
+static const char *const core_devices[] = {
+	"CLOCK",
 	"sys_clock",
 	"UART_0",
+};
+#elif defined(CONFIG_SOC_SERIES_CC13X2_CC26X2)
+#define MAX_PM_DEVICES	15
+static const char *const core_devices[] = {
+	"sys_clock",
+	"UART_0",
+};
+#elif defined(CONFIG_SOC_SERIES_KINETIS_K6X)
+#define MAX_PM_DEVICES		1
+static const char *const core_devices[] = {
+	DT_LABEL(DT_INST(0, nxp_kinetis_ethernet)),
 };
 #else
 #error "Add SoC's core devices list for PM"
@@ -45,7 +53,25 @@ static int device_retval[MAX_PM_DEVICES];
 static struct device *pm_device_list;
 static int device_count;
 
-int sys_pm_suspend_devices(void)
+const char *device_pm_state_str(u32_t state)
+{
+	switch (state) {
+	case DEVICE_PM_ACTIVE_STATE:
+		return "active";
+	case DEVICE_PM_LOW_POWER_STATE:
+		return "low power";
+	case DEVICE_PM_SUSPEND_STATE:
+		return "suspend";
+	case DEVICE_PM_FORCE_SUSPEND_STATE:
+		return "force suspend";
+	case DEVICE_PM_OFF_STATE:
+		return "off";
+	default:
+		return "";
+	}
+}
+
+static int _sys_pm_devices(u32_t state)
 {
 	for (int i = device_count - 1; i >= 0; i--) {
 		int idx = device_ordered_list[i];
@@ -54,11 +80,12 @@ int sys_pm_suspend_devices(void)
 		 * and set the device states accordingly.
 		 */
 		device_retval[i] = device_set_power_state(&pm_device_list[idx],
-						DEVICE_PM_SUSPEND_STATE,
+						state,
 						NULL, NULL);
 		if (device_retval[i]) {
-			LOG_ERR("%s suspend operation failed\n",
-					pm_device_list[idx].config->name);
+			LOG_DBG("%s did not enter %s state",
+				pm_device_list[idx].config->name,
+				device_pm_state_str(state));
 			return device_retval[i];
 		}
 	}
@@ -66,22 +93,19 @@ int sys_pm_suspend_devices(void)
 	return 0;
 }
 
+int sys_pm_suspend_devices(void)
+{
+	return _sys_pm_devices(DEVICE_PM_SUSPEND_STATE);
+}
+
+int sys_pm_low_power_devices(void)
+{
+	return _sys_pm_devices(DEVICE_PM_LOW_POWER_STATE);
+}
+
 int sys_pm_force_suspend_devices(void)
 {
-	for (int i = device_count - 1; i >= 0; i--) {
-		int idx = device_ordered_list[i];
-
-		device_retval[i] = device_set_power_state(&pm_device_list[idx],
-					DEVICE_PM_FORCE_SUSPEND_STATE,
-					NULL, NULL);
-		if (device_retval[i]) {
-			LOG_ERR("%s force suspend operation failed\n",
-				pm_device_list[idx].config->name);
-			return device_retval[i];
-		}
-	}
-
-	return 0;
+	return _sys_pm_devices(DEVICE_PM_FORCE_SUSPEND_STATE);
 }
 
 void sys_pm_resume_devices(void)
@@ -112,14 +136,16 @@ void sys_pm_create_device_list(void)
 	device_list_get(&pm_device_list, &count);
 
 	/* Reserve for 32KHz, 16MHz, system clock, etc... */
-	device_count = NUM_CORE_DEVICES;
+	device_count = ARRAY_SIZE(core_devices);
 
 	for (i = 0; (i < count) && (device_count < MAX_PM_DEVICES); i++) {
 
 		/* Check if the device is core device */
-		for (j = 0, is_core_dev = false; j < NUM_CORE_DEVICES; j++) {
+		for (j = 0, is_core_dev = false;
+		     j < ARRAY_SIZE(core_devices);
+		     j++) {
 			if (!strcmp(pm_device_list[i].config->name,
-						&core_devices[j][0])) {
+						core_devices[j])) {
 				is_core_dev = true;
 				break;
 			}

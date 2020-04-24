@@ -11,12 +11,22 @@
 #ifndef ZEPHYR_DRIVERS_SENSOR_LSM6DSO_LSM6DSO_H_
 #define ZEPHYR_DRIVERS_SENSOR_LSM6DSO_LSM6DSO_H_
 
-#include <sensor.h>
+#include <drivers/sensor.h>
 #include <zephyr/types.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <drivers/spi.h>
 #include <sys/util.h>
 #include "lsm6dso_reg.h"
+
+union axis3bit16_t {
+	s16_t i16bit[3];
+	u8_t u8bit[6];
+};
+
+union axis1bit16_t {
+	s16_t i16bit;
+	u8_t u8bit[2];
+};
 
 #define LSM6DSO_EN_BIT					0x01
 #define LSM6DSO_DIS_BIT					0x00
@@ -87,17 +97,18 @@ struct lsm6dso_config {
 #ifdef CONFIG_LSM6DSO_TRIGGER
 	const char *int_gpio_port;
 	u8_t int_gpio_pin;
+	u8_t int_gpio_flags;
 	u8_t int_pin;
 #endif /* CONFIG_LSM6DSO_TRIGGER */
-#ifdef DT_ST_LSM6DSO_BUS_I2C
+#if DT_ANY_INST_ON_BUS(i2c)
 	u16_t i2c_slv_addr;
-#elif DT_ST_LSM6DSO_BUS_SPI
+#elif DT_ANY_INST_ON_BUS(spi)
 	struct spi_config spi_conf;
-#if defined(DT_INST_0_ST_LSM6DSO_CS_GPIOS_CONTROLLER)
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
 	const char *gpio_cs_port;
 	u8_t cs_gpio;
-#endif /* DT_INST_0_ST_LSM6DSO_CS_GPIOS_CONTROLLER */
-#endif /* DT_ST_LSM6DSO_BUS_I2C */
+#endif /* DT_INST_SPI_DEV_HAS_CS_GPIOS(0) */
+#endif /* DT_ANY_INST_ON_BUS(i2c) */
 };
 
 union samples {
@@ -146,12 +157,12 @@ struct lsm6dso_data {
 	} hts221;
 #endif /* CONFIG_LSM6DSO_SENSORHUB */
 
-	lsm6dso_ctx_t *ctx;
+	stmdev_ctx_t *ctx;
 
-	#ifdef DT_ST_LSM6DSO_BUS_I2C
-	lsm6dso_ctx_t ctx_i2c;
-	#elif DT_ST_LSM6DSO_BUS_SPI
-	lsm6dso_ctx_t ctx_spi;
+	#if DT_ANY_INST_ON_BUS(i2c)
+	stmdev_ctx_t ctx_i2c;
+	#elif DT_ANY_INST_ON_BUS(spi)
+	stmdev_ctx_t ctx_spi;
 	#endif
 
 	u16_t accel_freq;
@@ -176,7 +187,7 @@ struct lsm6dso_data {
 #endif
 #endif /* CONFIG_LSM6DSO_TRIGGER */
 
-#if defined(DT_INST_0_ST_LSM6DSO_CS_GPIOS_CONTROLLER)
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
 	struct spi_cs_control cs_ctrl;
 #endif
 };

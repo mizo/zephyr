@@ -111,7 +111,7 @@ static void tqueue_thread_thread(struct k_queue *pqueue)
 	/**TESTPOINT: thread-thread data passing via queue*/
 	k_tid_t tid = k_thread_create(&tdata, tstack, STACK_SIZE,
 				      tThread_entry, pqueue, NULL, NULL,
-				      K_PRIO_PREEMPT(0), 0, 0);
+				      K_PRIO_PREEMPT(0), 0, K_NO_WAIT);
 	tqueue_append(pqueue);
 	k_sem_take(&end_sema, K_FOREVER);
 	k_thread_abort(tid);
@@ -192,14 +192,14 @@ static void tqueue_get_2threads(struct k_queue *pqueue)
 	k_sem_init(&end_sema, 0, 1);
 	k_tid_t tid = k_thread_create(&tdata, tstack, STACK_SIZE,
 				      tThread_get, pqueue, NULL, NULL,
-				      K_PRIO_PREEMPT(0), 0, 0);
+				      K_PRIO_PREEMPT(0), 0, K_NO_WAIT);
 
 	k_tid_t tid1 = k_thread_create(&tdata1, tstack1, STACK_SIZE,
 				       tThread_get, pqueue, NULL, NULL,
-				       K_PRIO_PREEMPT(0), 0, 0);
+				       K_PRIO_PREEMPT(0), 0, K_NO_WAIT);
 
 	/* Wait threads to initialize */
-	k_sleep(10);
+	k_sleep(K_MSEC(10));
 
 	k_queue_append(pqueue, (void *)&data[0]);
 	k_queue_append(pqueue, (void *)&data[1]);
@@ -273,6 +273,16 @@ static void tqueue_alloc(struct k_queue *pqueue)
  */
 void test_queue_alloc(void)
 {
+	struct k_mem_block block;
+
+	/* The mem_pool_fail pool is supposed to be too small to
+	 * succeed any allocations, but in fact with the heap backend
+	 * there's some base minimal memory in there that can be used.
+	 * Make sure it's really truly full.
+	 */
+	while (k_mem_pool_alloc(&mem_pool_fail, &block, 1, K_NO_WAIT) == 0) {
+	}
+
 	k_queue_init(&queue);
 
 	tqueue_alloc(&queue);

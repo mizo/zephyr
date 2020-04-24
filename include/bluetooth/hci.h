@@ -14,169 +14,24 @@
 #include <string.h>
 #include <sys/util.h>
 #include <net/buf.h>
+#include <bluetooth/addr.h>
+#include <bluetooth/hci_err.h>
+#include <bluetooth/conn.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* Company Identifiers (see Bluetooth Assigned Numbers) */
-#define BT_COMP_ID_LF           0x05f1
-
-#define BT_ADDR_LE_PUBLIC       0x00
-#define BT_ADDR_LE_RANDOM       0x01
-#define BT_ADDR_LE_PUBLIC_ID    0x02
-#define BT_ADDR_LE_RANDOM_ID    0x03
 
 /* Special own address types for LL privacy (used in adv & scan parameters) */
 #define BT_HCI_OWN_ADDR_RPA_OR_PUBLIC  0x02
 #define BT_HCI_OWN_ADDR_RPA_OR_RANDOM  0x03
 #define BT_HCI_OWN_ADDR_RPA_MASK       0x02
 
-/** Bluetooth Device Address */
-typedef struct {
-	u8_t  val[6];
-} bt_addr_t;
-
-/** Bluetooth LE Device Address */
-typedef struct {
-	u8_t      type;
-	bt_addr_t a;
-} bt_addr_le_t;
-
-#define BT_ADDR_ANY     (&(bt_addr_t) { { 0, 0, 0, 0, 0, 0 } })
-#define BT_ADDR_NONE    (&(bt_addr_t) { \
-			 { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } })
-#define BT_ADDR_LE_ANY  (&(bt_addr_le_t) { 0, { { 0, 0, 0, 0, 0, 0 } } })
-#define BT_ADDR_LE_NONE (&(bt_addr_le_t) { 0, \
-			 { { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } } })
-
-static inline int bt_addr_cmp(const bt_addr_t *a, const bt_addr_t *b)
-{
-	return memcmp(a, b, sizeof(*a));
-}
-
-static inline int bt_addr_le_cmp(const bt_addr_le_t *a, const bt_addr_le_t *b)
-{
-	return memcmp(a, b, sizeof(*a));
-}
-
-static inline void bt_addr_copy(bt_addr_t *dst, const bt_addr_t *src)
-{
-	memcpy(dst, src, sizeof(*dst));
-}
-
-static inline void bt_addr_le_copy(bt_addr_le_t *dst, const bt_addr_le_t *src)
-{
-	memcpy(dst, src, sizeof(*dst));
-}
-
-#define BT_ADDR_IS_RPA(a)     (((a)->val[5] & 0xc0) == 0x40)
-#define BT_ADDR_IS_NRPA(a)    (((a)->val[5] & 0xc0) == 0x00)
-#define BT_ADDR_IS_STATIC(a)  (((a)->val[5] & 0xc0) == 0xc0)
-
-#define BT_ADDR_SET_RPA(a)    ((a)->val[5] = (((a)->val[5] & 0x3f) | 0x40))
-#define BT_ADDR_SET_NRPA(a)   ((a)->val[5] &= 0x3f)
-#define BT_ADDR_SET_STATIC(a) ((a)->val[5] |= 0xc0)
-
-int bt_addr_le_create_nrpa(bt_addr_le_t *addr);
-int bt_addr_le_create_static(bt_addr_le_t *addr);
-
-static inline bool bt_addr_le_is_rpa(const bt_addr_le_t *addr)
-{
-	if (addr->type != BT_ADDR_LE_RANDOM) {
-		return false;
-	}
-
-	return BT_ADDR_IS_RPA(&addr->a);
-}
-
-static inline bool bt_addr_le_is_identity(const bt_addr_le_t *addr)
-{
-	if (addr->type == BT_ADDR_LE_PUBLIC) {
-		return true;
-	}
-
-	return BT_ADDR_IS_STATIC(&addr->a);
-}
+#define BT_HCI_PEER_ADDR_RPA_UNRESOLVED 0xfe
+#define BT_HCI_PEER_ADDR_ANONYMOUS      0xff
 
 #define BT_ENC_KEY_SIZE_MIN                     0x07
 #define BT_ENC_KEY_SIZE_MAX                     0x10
-
-/* HCI Error Codes */
-#define BT_HCI_ERR_SUCCESS                      0x00
-#define BT_HCI_ERR_UNKNOWN_CMD                  0x01
-#define BT_HCI_ERR_UNKNOWN_CONN_ID              0x02
-#define BT_HCI_ERR_HW_FAILURE                   0x03
-#define BT_HCI_ERR_PAGE_TIMEOUT                 0x04
-#define BT_HCI_ERR_AUTH_FAIL                    0x05
-#define BT_HCI_ERR_PIN_OR_KEY_MISSING           0x06
-#define BT_HCI_ERR_MEM_CAPACITY_EXCEEDED        0x07
-#define BT_HCI_ERR_CONN_TIMEOUT                 0x08
-#define BT_HCI_ERR_CONN_LIMIT_EXCEEDED          0x09
-#define BT_HCI_ERR_SYNC_CONN_LIMIT_EXCEEDED     0x0a
-#define BT_HCI_ERR_CONN_ALREADY_EXISTS          0x0b
-#define BT_HCI_ERR_CMD_DISALLOWED               0x0c
-#define BT_HCI_ERR_INSUFFICIENT_RESOURCES       0x0d
-#define BT_HCI_ERR_INSUFFICIENT_SECURITY        0x0e
-#define BT_HCI_ERR_BD_ADDR_UNACCEPTABLE         0x0f
-#define BT_HCI_ERR_CONN_ACCEPT_TIMEOUT          0x10
-#define BT_HCI_ERR_UNSUPP_FEATURE_PARAM_VAL     0x11
-#define BT_HCI_ERR_INVALID_PARAM                0x12
-#define BT_HCI_ERR_REMOTE_USER_TERM_CONN        0x13
-#define BT_HCI_ERR_REMOTE_LOW_RESOURCES         0x14
-#define BT_HCI_ERR_REMOTE_POWER_OFF             0x15
-#define BT_HCI_ERR_LOCALHOST_TERM_CONN          0x16
-#define BT_HCI_ERR_PAIRING_NOT_ALLOWED          0x18
-#define BT_HCI_ERR_UNSUPP_REMOTE_FEATURE        0x1a
-#define BT_HCI_ERR_INVALID_LL_PARAM             0x1e
-#define BT_HCI_ERR_UNSPECIFIED                  0x1f
-#define BT_HCI_ERR_UNSUPP_LL_PARAM_VAL          0x20
-#define BT_HCI_ERR_LL_RESP_TIMEOUT              0x22
-#define BT_HCI_ERR_LL_PROC_COLLISION            0x23
-#define BT_HCI_ERR_INSTANT_PASSED               0x28
-#define BT_HCI_ERR_PAIRING_NOT_SUPPORTED        0x29
-#define BT_HCI_ERR_DIFF_TRANS_COLLISION         0x2a
-#define BT_HCI_ERR_UNACCEPT_CONN_PARAM          0x3b
-#define BT_HCI_ERR_ADV_TIMEOUT                  0x3c
-#define BT_HCI_ERR_TERM_DUE_TO_MIC_FAIL         0x3d
-#define BT_HCI_ERR_CONN_FAIL_TO_ESTAB           0x3e
-
-#define BT_HCI_ERR_AUTHENTICATION_FAIL __DEPRECATED_MACRO BT_HCI_ERR_AUTH_FAIL
-
-/* EIR/AD data type definitions */
-#define BT_DATA_FLAGS                   0x01 /* AD flags */
-#define BT_DATA_UUID16_SOME             0x02 /* 16-bit UUID, more available */
-#define BT_DATA_UUID16_ALL              0x03 /* 16-bit UUID, all listed */
-#define BT_DATA_UUID32_SOME             0x04 /* 32-bit UUID, more available */
-#define BT_DATA_UUID32_ALL              0x05 /* 32-bit UUID, all listed */
-#define BT_DATA_UUID128_SOME            0x06 /* 128-bit UUID, more available */
-#define BT_DATA_UUID128_ALL             0x07 /* 128-bit UUID, all listed */
-#define BT_DATA_NAME_SHORTENED          0x08 /* Shortened name */
-#define BT_DATA_NAME_COMPLETE           0x09 /* Complete name */
-#define BT_DATA_TX_POWER                0x0a /* Tx Power */
-#define BT_DATA_SM_TK_VALUE             0x10 /* Security Manager TK Value */
-#define BT_DATA_SM_OOB_FLAGS            0x11 /* Security Manager OOB Flags */
-#define BT_DATA_SOLICIT16               0x14 /* Solicit UUIDs, 16-bit */
-#define BT_DATA_SOLICIT128              0x15 /* Solicit UUIDs, 128-bit */
-#define BT_DATA_SVC_DATA16              0x16 /* Service data, 16-bit UUID */
-#define BT_DATA_GAP_APPEARANCE          0x19 /* GAP appearance */
-#define BT_DATA_LE_BT_DEVICE_ADDRESS    0x1b /* LE Bluetooth Device Address */
-#define BT_DATA_LE_ROLE                 0x1c /* LE Role */
-#define BT_DATA_SOLICIT32               0x1f /* Solicit UUIDs, 32-bit */
-#define BT_DATA_SVC_DATA32              0x20 /* Service data, 32-bit UUID */
-#define BT_DATA_SVC_DATA128             0x21 /* Service data, 128-bit UUID */
-#define BT_DATA_LE_SC_CONFIRM_VALUE     0x22 /* LE SC Confirmation Value */
-#define BT_DATA_LE_SC_RANDOM_VALUE      0x23 /* LE SC Random Value */
-#define BT_DATA_URI                     0x24 /* URI */
-#define BT_DATA_MESH_PROV               0x29 /* Mesh Provisioning PDU */
-#define BT_DATA_MESH_MESSAGE            0x2a /* Mesh Networking PDU */
-#define BT_DATA_MESH_BEACON             0x2b /* Mesh Beacon */
-
-#define BT_DATA_MANUFACTURER_DATA       0xff /* Manufacturer Specific Data */
-
-#define BT_LE_AD_LIMITED                0x01 /* Limited Discoverable */
-#define BT_LE_AD_GENERAL                0x02 /* General Discoverable */
-#define BT_LE_AD_NO_BREDR               0x04 /* BR/EDR not supported */
 
 struct bt_hci_evt_hdr {
 	u8_t  evt;
@@ -187,9 +42,15 @@ struct bt_hci_evt_hdr {
 #define BT_ACL_START_NO_FLUSH           0x00
 #define BT_ACL_CONT                     0x01
 #define BT_ACL_START                    0x02
+#define BT_ACL_COMPLETE                 0x03
 
-#define bt_acl_handle(h)                ((h) & 0x0fff)
+#define BT_ACL_POINT_TO_POINT           0x00
+#define BT_ACL_BROADCAST                0x01
+
+#define bt_acl_handle(h)                ((h) & BIT_MASK(12))
 #define bt_acl_flags(h)                 ((h) >> 12)
+#define bt_acl_flags_pb(f)              ((f) & BIT_MASK(2))
+#define bt_acl_flags_bc(f)              ((f) >> 2)
 #define bt_acl_handle_pack(h, f)        ((h) | ((f) << 12))
 
 struct bt_hci_acl_hdr {
@@ -238,11 +99,30 @@ struct bt_hci_cmd_hdr {
 #define BT_LE_FEAT_BIT_SMI_TX                   9
 #define BT_LE_FEAT_BIT_SMI_RX                   10
 #define BT_LE_FEAT_BIT_PHY_CODED                11
-#define BT_LE_FEAT_BIT_ADV_EXT                  12
-#define BT_LE_FEAT_BIT_ADV_PER                  13
+#define BT_LE_FEAT_BIT_EXT_ADV                  12
+#define BT_LE_FEAT_BIT_PER_ADV                  13
 #define BT_LE_FEAT_BIT_CHAN_SEL_ALGO_2          14
 #define BT_LE_FEAT_BIT_PWR_CLASS_1              15
 #define BT_LE_FEAT_BIT_MIN_USED_CHAN_PROC       16
+#define BT_LE_FEAT_BIT_CONN_CTE_REQ             17
+#define BT_LE_FEAT_BIT_CONN_CTE_RESP            18
+#define BT_LE_FEAT_BIT_CONNECTIONLESS_CTE_TX    19
+#define BT_LE_FEAT_BIT_CONNECTIONLESS_CTE_RX    20
+#define BT_LE_FEAT_BIT_ANT_SWITCH_TX_AOD        21
+#define BT_LE_FEAT_BIT_ANT_SWITCH_RX_AOA        22
+#define BT_LE_FEAT_BIT_RX_CTE                   23
+#define BT_LE_FEAT_BIT_PERIODIC_SYNC_XFER_SEND  24
+#define BT_LE_FEAT_BIT_PERIODIC_SYNC_XFER_RECV  25
+#define BT_LE_FEAT_BIT_SCA_UPDATE               26
+#define BT_LE_FEAT_BIT_REMOTE_PUB_KEY_VALIDATE  27
+#define BT_LE_FEAT_BIT_CIS_MASTER               28
+#define BT_LE_FEAT_BIT_CIS_SLAVE                29
+#define BT_LE_FEAT_BIT_ISO_BROADCASTER          30
+#define BT_LE_FEAT_BIT_SYNC_RECEIVER            31
+#define BT_LE_FEAT_BIT_ISO_CHANNELS             32
+#define BT_LE_FEAT_BIT_PWR_CTRL_REQ             33
+#define BT_LE_FEAT_BIT_PWR_CHG_IND              34
+#define BT_LE_FEAT_BIT_PATH_LOSS_MONITOR        35
 
 #define BT_LE_FEAT_TEST(feat, n)                (feat[(n) >> 3] & \
 						 BIT((n) & 7))
@@ -261,6 +141,8 @@ struct bt_hci_cmd_hdr {
 						BT_LE_FEAT_BIT_PHY_CODED)
 #define BT_FEAT_LE_PRIVACY(feat)                BT_LE_FEAT_TEST(feat, \
 						BT_LE_FEAT_BIT_PRIVACY)
+#define BT_FEAT_LE_EXT_ADV(feat)                BT_LE_FEAT_TEST(feat, \
+						BT_LE_FEAT_BIT_EXT_ADV)
 
 /* LE States */
 #define BT_LE_STATES_SLAVE_CONN_ADV(states)     (states & 0x0000004000000000)
@@ -284,22 +166,6 @@ struct bt_hci_cmd_hdr {
 #define BT_IO_DISPLAY_YESNO                     0x01
 #define BT_IO_KEYBOARD_ONLY                     0x02
 #define BT_IO_NO_INPUT_OUTPUT                   0x03
-
-/* Defined GAP timers */
-#define BT_GAP_SCAN_FAST_INTERVAL               0x0060  /* 60 ms    */
-#define BT_GAP_SCAN_FAST_WINDOW                 0x0030  /* 30 ms    */
-#define BT_GAP_SCAN_SLOW_INTERVAL_1             0x0800  /* 1.28 s   */
-#define BT_GAP_SCAN_SLOW_WINDOW_1               0x0012  /* 11.25 ms */
-#define BT_GAP_SCAN_SLOW_INTERVAL_2             0x1000  /* 2.56 s   */
-#define BT_GAP_SCAN_SLOW_WINDOW_2               0x0012  /* 11.25 ms */
-#define BT_GAP_ADV_FAST_INT_MIN_1               0x0030  /* 30 ms    */
-#define BT_GAP_ADV_FAST_INT_MAX_1               0x0060  /* 60 ms    */
-#define BT_GAP_ADV_FAST_INT_MIN_2               0x00a0  /* 100 ms   */
-#define BT_GAP_ADV_FAST_INT_MAX_2               0x00f0  /* 150 ms   */
-#define BT_GAP_ADV_SLOW_INT_MIN                 0x0640  /* 1 s      */
-#define BT_GAP_ADV_SLOW_INT_MAX                 0x0780  /* 1.2 s    */
-#define BT_GAP_INIT_CONN_INT_MIN                0x0018  /* 30 ms    */
-#define BT_GAP_INIT_CONN_INT_MAX                0x0028  /* 50 ms    */
 
 /* SCO packet types */
 #define HCI_PKT_TYPE_HV1                        0x0020
@@ -748,14 +614,21 @@ struct bt_hci_cp_le_set_random_address {
 	bt_addr_t bdaddr;
 } __packed;
 
-/* Advertising types */
-#define BT_LE_ADV_IND                           0x00
-#define BT_LE_ADV_DIRECT_IND                    0x01
-#define BT_LE_ADV_SCAN_IND                      0x02
-#define BT_LE_ADV_NONCONN_IND                   0x03
-#define BT_LE_ADV_DIRECT_IND_LOW_DUTY           0x04
-/* Needed in advertising reports when getting info about */
-#define BT_LE_ADV_SCAN_RSP                      0x04
+/* LE Advertising Types (LE Advertising Parameters Set)*/
+#define BT_LE_ADV_IND                  (__DEPRECATED_MACRO 0x00)
+#define BT_LE_ADV_DIRECT_IND           (__DEPRECATED_MACRO 0x01)
+#define BT_LE_ADV_SCAN_IND             (__DEPRECATED_MACRO 0x02)
+#define BT_LE_ADV_NONCONN_IND          (__DEPRECATED_MACRO 0x03)
+#define BT_LE_ADV_DIRECT_IND_LOW_DUTY  (__DEPRECATED_MACRO 0x04)
+/* LE Advertising PDU Types. */
+#define BT_LE_ADV_SCAN_RSP             (__DEPRECATED_MACRO 0x04)
+
+#define BT_HCI_ADV_IND                          0x00
+#define BT_HCI_ADV_DIRECT_IND                   0x01
+#define BT_HCI_ADV_SCAN_IND                     0x02
+#define BT_HCI_ADV_NONCONN_IND                  0x03
+#define BT_HCI_ADV_DIRECT_IND_LOW_DUTY          0x04
+#define BT_HCI_ADV_SCAN_RSP                     0x04
 
 #define BT_LE_ADV_FP_NO_WHITELIST               0x00
 #define BT_LE_ADV_FP_WHITELIST_SCAN_REQ         0x01
@@ -1159,6 +1032,11 @@ struct bt_hci_cp_le_set_adv_set_random_addr {
 #define BT_HCI_LE_ADV_PROP_ANON                 BIT(5)
 #define BT_HCI_LE_ADV_PROP_TX_POWER             BIT(6)
 
+#define BT_HCI_LE_ADV_SCAN_REQ_ENABLE  1
+#define BT_HCI_LE_ADV_SCAN_REQ_DISABLE 0
+
+#define BT_HCI_LE_ADV_TX_POWER_NO_PREF 0x7F
+
 #define BT_HCI_OP_LE_SET_EXT_ADV_PARAM          BT_OP(BT_OGF_LE, 0x0036)
 struct bt_hci_cp_le_set_ext_adv_param {
 	u8_t         handle;
@@ -1189,6 +1067,8 @@ struct bt_hci_rp_le_set_ext_adv_param {
 
 #define BT_HCI_LE_EXT_ADV_FRAG_ENABLED          0x00
 #define BT_HCI_LE_EXT_ADV_FRAG_DISABLED         0x01
+
+#define BT_HCI_LE_EXT_ADV_FRAG_MAX_LEN          251
 
 #define BT_HCI_OP_LE_SET_EXT_ADV_DATA           BT_OP(BT_OGF_LE, 0x0037)
 struct bt_hci_cp_le_set_ext_adv_data {
@@ -1293,8 +1173,8 @@ struct bt_hci_cp_le_set_ext_scan_enable {
 
 #define BT_HCI_OP_LE_EXT_CREATE_CONN            BT_OP(BT_OGF_LE, 0x0043)
 struct bt_hci_ext_conn_phy {
-	u16_t interval;
-	u16_t window;
+	u16_t scan_interval;
+	u16_t scan_window;
 	u16_t conn_interval_min;
 	u16_t conn_interval_max;
 	u16_t conn_latency;
@@ -1724,8 +1604,20 @@ struct bt_hci_evt_le_phy_update_complete {
 } __packed;
 
 #define BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT    0x0d
+
+#define BT_HCI_LE_ADV_EVT_TYPE_CONN                 BIT(0)
+#define BT_HCI_LE_ADV_EVT_TYPE_SCAN                 BIT(1)
+#define BT_HCI_LE_ADV_EVT_TYPE_DIRECT               BIT(2)
+#define BT_HCI_LE_ADV_EVT_TYPE_SCAN_RSP             BIT(3)
+#define BT_HCI_LE_ADV_EVT_TYPE_LEGACY               BIT(4)
+
+#define BT_HCI_LE_ADV_EVT_TYPE_DATA_STATUS(ev_type) (((ev_type) >> 5) & 0x03)
+#define BT_HCI_LE_ADV_EVT_TYPE_DATA_STATUS_COMPLETE   0
+#define BT_HCI_LE_ADV_EVT_TYPE_DATA_STATUS_PARTIAL    1
+#define BT_HCI_LE_ADV_EVT_TYPE_DATA_STATUS_INCOMPLETE 2
+
 struct bt_hci_evt_le_ext_advertising_info {
-	u8_t         evt_type;
+	u16_t        evt_type;
 	bt_addr_le_t addr;
 	u8_t         prim_phy;
 	u8_t         sec_phy;
@@ -1772,7 +1664,7 @@ struct bt_hci_evt_le_per_adv_sync_lost {
 #define BT_HCI_EVT_LE_SCAN_TIMEOUT              0x11
 
 #define BT_HCI_EVT_LE_ADV_SET_TERMINATED        0x12
-struct bt_hci_evt_le_per_adv_set_terminated {
+struct bt_hci_evt_le_adv_set_terminated {
 	u8_t  status;
 	u8_t  adv_handle;
 	u16_t conn_handle;
@@ -1932,6 +1824,15 @@ int bt_hci_cmd_send(u16_t opcode, struct net_buf *buf);
   */
 int bt_hci_cmd_send_sync(u16_t opcode, struct net_buf *buf,
 			 struct net_buf **rsp);
+
+/** @brief Get connection handle for a connection.
+ *
+ * @param conn Connection object.
+ * @param conn_handle Place to store the Connection handle.
+ *
+ * @return 0 on success or negative error value on failure.
+ */
+int bt_hci_get_conn_handle(const struct bt_conn *conn, u16_t *conn_handle);
 
 /** @typedef bt_hci_vnd_evt_cb_t
   * @brief Callback type for vendor handling of HCI Vendor-Specific Events.

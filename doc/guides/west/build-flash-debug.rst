@@ -7,12 +7,8 @@ Zephyr provides several :ref:`west extension commands <west-extensions>` for
 building, flashing, and interacting with Zephyr programs running on a board:
 ``build``, ``flash``, ``debug``, ``debugserver`` and ``attach``.
 
-These use information stored in the CMake cache [#cmakecache]_ to
-flash or attach a debugger to a board supported by Zephyr. The exception is
-starting a clean build (i.e. with no previous artifacts) which will in fact
-run CMake thus creating the corresponding cache.
-The CMake build system commands with the same names (i.e. all but ``build``)
-directly delegate to West.
+For information on adding board support for the flashing and debugging
+commands, see :ref:`flash-and-debug-support` in the board porting guide.
 
 .. Add a per-page contents at the top of the page. This page is nested
    deeply enough that it doesn't have any subheadings in the main nav.
@@ -76,6 +72,13 @@ Examples
 
 Here are some ``west build`` usage examples, grouped by area.
 
+Forcing CMake to Run Again
+--------------------------
+
+To force a CMake re-run, use the ``--cmake`` (or ``--c``) option::
+
+  west build -c
+
 Setting a Default Board
 -----------------------
 
@@ -110,11 +113,8 @@ With the above, running ``west build -b reel_board samples/hello_world`` will
 use build directory :file:`build/reel_board/hello_world`.  See
 :ref:`west-building-config` for more details on this option.
 
-Controlling the Build System
-----------------------------
-
-There are several ways to control the build system generated and used by ``west
-build``.
+Setting the Build System Target
+-------------------------------
 
 To specify the build system target to run, use ``--target`` (or ``-t``).
 
@@ -133,10 +133,18 @@ all the files in the build directory::
 
   west build -t pristine
 
-To have ``west build`` run the ``pristine`` target before re-running CMake to
-generate a build system, use the ``--pristine`` (or ``-p``) option. For
-example, to switch board and application (which requires a pristine build
-directory) in one command::
+.. _west-building-pristine:
+
+Pristine Builds
+---------------
+
+A *pristine* build directory is essentially a new build directory. All
+byproducts from previous builds have been removed.
+
+To have ``west build`` make the build directory pristine before re-running
+CMake to generate a build system, use the ``--pristine`` (or ``-p``)
+option. For example, to switch board and application (which requires a pristine
+build directory) in one command::
 
   west build -b qemu_x86 samples/philosophers
   west build -p -b reel_board samples/hello_world
@@ -150,23 +158,39 @@ To let west decide for you if a pristine build is needed, use ``-p auto``::
    You can run ``west config build.pristine auto`` to make this setting
    permanent.
 
-.. _west-building-generator:
+.. _west-building-verbose:
 
-To add additional arguments to the CMake invocation performed by ``west
+Verbose Builds
+--------------
+
+To print the CMake and compiler commands run by ``west build``, use the global
+west verbosity option, ``-v``::
+
+  west -v build -b reel_board samples/hello_world
+
+.. _west-building-generator:
+.. _west-building-cmake-args:
+
+One-Time CMake Arguments
+------------------------
+
+To pass additional arguments to the CMake invocation performed by ``west
 build``, pass them after a ``--`` at the end of the command line.
+
+.. important::
+
+   Passing additional CMake arguments like this forces ``west build`` to re-run
+   CMake, even if a build system has already been generated.
+
+   After using ``--`` once to generate the build directory, use ``west build -d
+   <build-dir>`` on subsequent runs to do incremental builds.
 
 For example, to use the Unix Makefiles CMake generator instead of Ninja (which
 ``west build`` uses by default), run::
 
   west build -b reel_board -- -G'Unix Makefiles'
 
-.. note::
-
-   Passing additional CMake arguments like this forces ``west build`` to re-run
-   CMake, even if a build system has already been generated.
-
-As another example, to use Unix Makefiles and enable the
-`CMAKE_VERBOSE_MAKEFILE`_ option::
+To use Unix Makefiles and set `CMAKE_VERBOSE_MAKEFILE`_ to ``ON``::
 
   west build -b reel_board -- -G'Unix Makefiles' -DCMAKE_VERBOSE_MAKEFILE=ON
 
@@ -174,14 +198,84 @@ Notice how the ``--`` only appears once, even though multiple CMake arguments
 are given. All command-line arguments to ``west build`` after a ``--`` are
 passed to CMake.
 
-As a final example, to merge the :file:`file.conf` Kconfig fragment into your
-build's :file:`.config`::
+.. _west-building-dtc-overlay-file:
+
+To set :ref:`DTC_OVERLAY_FILE <important-build-vars>` to
+:file:`enable-modem.overlay`, using that file as a
+:ref:`devicetree overlay <dt-guide>`::
+
+  west build -b reel_board -- -DDTC_OVERLAY_FILE=enable-modem.overlay
+
+To merge the :file:`file.conf` Kconfig fragment into your build's
+:file:`.config`::
 
   west build -- -DOVERLAY_CONFIG=file.conf
 
-To force a CMake re-run, use the ``--cmake`` (or ``--c``) option::
+.. _west-building-cmake-config:
 
-  west build -c
+Permanent CMake Arguments
+-------------------------
+
+The previous section describes how to add CMake arguments for a single ``west
+build`` command. If you want to save CMake arguments for ``west build`` to use
+every time it generates a new build system instead, you should use the
+``build.cmake-args`` configuration option. Whenever ``west build`` runs CMake
+to generate a build system, it splits this option's value according to shell
+rules and includes the results in the ``cmake`` command line.
+
+Remember that, by default, ``west build`` **tries to avoid generating a new
+build system if one is present** in your build directory. Therefore, you need
+to either delete any existing build directories or do a :ref:`pristine build
+<west-building-pristine>` after setting ``build.cmake-args`` to make sure it
+will take effect.
+
+For example, to always enable :makevar:`CMAKE_EXPORT_COMPILE_COMMANDS`, you can
+run::
+
+  west config build.cmake-args -- -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+(The extra ``--`` is used to force the rest of the command to be treated as a
+positional argument. Without it, :ref:`west config <west-config-cmd>` would
+treat the ``-DVAR=VAL`` syntax as a use of its ``-D`` option.)
+
+To enable :makevar:`CMAKE_VERBOSE_MAKEFILE`, so CMake always produces a verbose
+build system::
+
+  west config build.cmake-args -- -DCMAKE_VERBOSE_MAKEFILE=ON
+
+To save more than one argument in ``build.cmake-args``, use a single string
+whose value can be split into distinct arguments (``west build`` uses the
+Python function `shlex.split()`_ internally to split the value).
+
+.. _shlex.split(): https://docs.python.org/3/library/shlex.html#shlex.split
+
+For example, to enable both :makevar:`CMAKE_EXPORT_COMPILE_COMMANDS` and
+:makevar:`CMAKE_VERBOSE_MAKEFILE`::
+
+  west config build.cmake-args -- "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_VERBOSE_MAKEFILE=ON"
+
+If you want to save your CMake arguments in a separate file instead, you can
+combine CMake's ``-C <initial-cache>`` option with ``build.cmake-args``. For
+instance, another way to set the options used in the previous example is to
+create a file named :file:`~/my-cache.cmake` with the following contents:
+
+.. code-block:: cmake
+
+   set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "")
+   set(CMAKE_VERBOSE_MAKEFILE ON CACHE BOOL "")
+
+Then run::
+
+  west config build.cmake-args "-C ~/my-cache.cmake"
+
+See the `cmake(1) manual page`_ and the `set() command`_ documentation for
+more details.
+
+.. _cmake(1) manual page:
+   https://cmake.org/cmake/help/latest/manual/cmake.1.html
+
+.. _set() command:
+   https://cmake.org/cmake/help/latest/command/set.html
 
 .. _west-building-config:
 
@@ -205,6 +299,10 @@ You can :ref:`configure <west-config-cmd>` ``west build`` using these options.
    * - ``build.board_warn``
      - Boolean, default ``true``. If ``false``, disables warnings when
        ``west build`` can't figure out the target board.
+   * - ``build.cmake-args``
+     - String. If present, the value will be split according to shell rules and
+       passed to CMake whenever a new build system is generated. See
+       :ref:`west-building-cmake-config`.
    * - ``build.dir-fmt``
      - String, default ``build``. The build folder format string, used by
        west whenever it needs to create or locate a build folder. The currently
@@ -433,8 +531,8 @@ For example, to print usage information about the ``jlink`` runner::
 
 .. _west-runner:
 
-Implementation Details
-**********************
+runners package API
+*******************
 
 The flash and debug commands are implemented as west *extension
 commands*: that is, they are west commands whose source code lives
@@ -509,12 +607,6 @@ targets provided by Zephyr's build system (in fact, that's how these
 commands do it).
 
 .. rubric:: Footnotes
-
-.. [#cmakecache]
-
-   The CMake cache is a file containing saved variables and values
-   which is created by CMake when it is first run to generate a build
-   system. See the `cmake(1)`_ manual for more details.
 
 .. _cmake(1):
    https://cmake.org/cmake/help/latest/manual/cmake.1.html

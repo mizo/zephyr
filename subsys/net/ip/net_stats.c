@@ -20,6 +20,7 @@ LOG_MODULE_REGISTER(net_stats, NET_LOG_LEVEL);
 #include <net/net_core.h>
 
 #include "net_stats.h"
+#include "net_private.h"
 
 /* Global network statistics.
  *
@@ -190,6 +191,18 @@ static inline void stats(struct net_if *iface)
 		ARG_UNUSED(i);
 #endif /* NET_TC_COUNT > 1 */
 
+#if defined(CONFIG_NET_STATISTICS_POWER_MANAGEMENT)
+		NET_INFO("Power management statistics:");
+		NET_INFO("Last suspend time: %u ms",
+			 GET_STAT(iface, pm.last_suspend_time));
+		NET_INFO("Got suspended %d times",
+			 GET_STAT(iface, pm.suspend_count));
+		NET_INFO("Average suspend time: %u ms",
+			 (u32_t)(GET_STAT(iface, pm.overall_suspend_time) /
+				 GET_STAT(iface, pm.suspend_count)));
+		NET_INFO("Total suspended time: %llu ms",
+			 GET_STAT(iface, pm.overall_suspend_time));
+#endif
 		next_print = curr + PRINT_STATISTICS_INTERVAL;
 	}
 }
@@ -284,6 +297,12 @@ static int net_stats_get(u32_t mgmt_request, struct net_if *iface,
 		src = GET_STAT_ADDR(iface, tcp);
 		break;
 #endif
+#if defined(CONFIG_NET_STATISTICS_POWER_MANAGEMENT)
+	case NET_REQUEST_STATS_GET_PM:
+		len_chk = sizeof(struct net_stats_pm);
+		src = GET_STAT_ADDR(iface, pm);
+		break;
+#endif
 	}
 
 	if (len != len_chk || !src) {
@@ -337,4 +356,20 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_STATS_GET_TCP,
 				  net_stats_get);
 #endif
 
+#if defined(CONFIG_NET_STATISTICS_POWER_MANAGEMENT)
+NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_STATS_GET_PM,
+				  net_stats_get);
+#endif
+
 #endif /* CONFIG_NET_STATISTICS_USER_API */
+
+void net_stats_reset(struct net_if *iface)
+{
+	if (iface) {
+		net_if_stats_reset(iface);
+		return;
+	}
+
+	net_if_stats_reset_all();
+	memset(&net_stats, 0, sizeof(net_stats));
+}

@@ -1,21 +1,28 @@
-# Kconfig.bmp280 - BMP280 temperature and pressure sensor configuration options
+# BMP280 temperature and pressure sensor configuration options
 
-#
 # Copyright (c) 2016 Intel Corporation
 # Copyright (c) 2017 IpTronix S.r.l.
-#
 # SPDX-License-Identifier: Apache-2.0
-#
+
 menuconfig BME280
 	bool "BME280/BMP280 sensor"
 	depends on I2C || SPI
-	default	n
 	help
-	 Enable driver for BME280 I2C-based or SPI-based temperature and pressure sensor.
+	  Enable driver for BME280 I2C-based or SPI-based temperature and pressure sensor.
 
 if BME280
 
-menu "Attributes"
+choice
+	prompt "BME280 sampling mode"
+	default BME280_MODE_NORMAL
+	help
+	  Select sampling mode. In normal mode continuous measurements are
+	  performed, whereas in forced mode only single measurement is performed.
+config BME280_MODE_NORMAL
+	bool "normal"
+config BME280_MODE_FORCED
+	bool "forced"
+endchoice
 
 choice
 	prompt "BME280 temperature oversampling"
@@ -111,7 +118,5 @@ config BME280_FILTER_8
 config BME280_FILTER_16
 	bool "16"
 endchoice
-
-endmenu
 
 endif # BME280

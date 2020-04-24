@@ -26,7 +26,7 @@ This example will only cover the qemu_x86 board, since the sample
 just prints text to a console.
 
 .. zephyr-app-commands::
-   :zephyr-app: samples/basic/userspace/shared_mem
+   :zephyr-app: samples/userspace/shared_mem
    :board: qemu_x86
    :goals: build run
    :compact:
@@ -57,4 +57,3 @@ performs a simulation of the enigma machine to produce cypher text(CT).
 The CT is copied to a shared memory partition connecting to the third
 thread. The third thread prints the CT to the console with a banner
 denoting the content as CYPHER TEXT.
-

@@ -8,23 +8,24 @@
  * https://www.st.com/resource/en/datasheet/lis2dw12.pdf
  */
 
+#define DT_DRV_COMPAT st_lis2dw12
+
 
 #include <string.h>
 #include "lis2dw12.h"
 #include <logging/log.h>
 
-#ifdef DT_ST_LIS2DW12_BUS_SPI
+#if DT_ANY_INST_ON_BUS(spi)
 
 #define LIS2DW12_SPI_READ		(1 << 7)
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_DECLARE(LIS2DW12);
+LOG_MODULE_DECLARE(LIS2DW12, CONFIG_SENSOR_LOG_LEVEL);
 
 static struct spi_config lis2dw12_spi_conf = {
-	.frequency = DT_INST_0_ST_LIS2DW12_SPI_MAX_FREQUENCY,
+	.frequency = DT_INST_PROP(0, spi_max_frequency),
 	.operation = (SPI_OP_MODE_MASTER | SPI_MODE_CPOL |
 		      SPI_MODE_CPHA | SPI_WORD_SET(8) | SPI_LINES_SINGLE),
-	.slave     = DT_INST_0_ST_LIS2DW12_BASE_ADDRESS,
+	.slave     = DT_INST_REG_ADDR(0),
 	.cs        = NULL,
 };
 
@@ -91,9 +92,9 @@ static int lis2dw12_spi_write(struct lis2dw12_data *ctx, u8_t reg,
 	return 0;
 }
 
-lis2dw12_ctx_t lis2dw12_spi_ctx = {
-	.read_reg = (lis2dw12_read_ptr) lis2dw12_spi_read,
-	.write_reg = (lis2dw12_write_ptr) lis2dw12_spi_write,
+stmdev_ctx_t lis2dw12_spi_ctx = {
+	.read_reg = (stmdev_read_ptr) lis2dw12_spi_read,
+	.write_reg = (stmdev_write_ptr) lis2dw12_spi_write,
 };
 
 int lis2dw12_spi_init(struct device *dev)
@@ -103,25 +104,25 @@ int lis2dw12_spi_init(struct device *dev)
 	data->ctx = &lis2dw12_spi_ctx;
 	data->ctx->handle = data;
 
-#if defined(DT_INST_0_ST_LIS2DW12_CS_GPIOS_CONTROLLER)
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
 	/* handle SPI CS thru GPIO if it is the case */
 	data->cs_ctrl.gpio_dev = device_get_binding(
-		DT_INST_0_ST_LIS2DW12_CS_GPIOS_CONTROLLER);
+		DT_INST_SPI_DEV_CS_GPIOS_LABEL(0));
 	if (!data->cs_ctrl.gpio_dev) {
 		LOG_ERR("Unable to get GPIO SPI CS device");
 		return -ENODEV;
 	}
 
-	data->cs_ctrl.gpio_pin = DT_INST_0_ST_LIS2DW12_CS_GPIOS_PIN;
+	data->cs_ctrl.gpio_pin = DT_INST_SPI_DEV_CS_GPIOS_PIN(0);
 	data->cs_ctrl.delay = 0U;
 
 	lis2dw12_spi_conf.cs = &data->cs_ctrl;
 
 	LOG_DBG("SPI GPIO CS configured on %s:%u",
-		    DT_INST_0_ST_LIS2DW12_CS_GPIOS_CONTROLLER,
-		    DT_INST_0_ST_LIS2DW12_CS_GPIOS_PIN);
+		    DT_INST_SPI_DEV_CS_GPIOS_LABEL(0),
+		    DT_INST_SPI_DEV_CS_GPIOS_PIN(0));
 #endif
 
 	return 0;
 }
-#endif /* DT_ST_LIS2DW12_BUS_SPI */
+#endif /* DT_ANY_INST_ON_BUS(spi) */

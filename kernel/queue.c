@@ -22,6 +22,7 @@
 #include <init.h>
 #include <syscall_handler.h>
 #include <kernel_internal.h>
+#include <sys/check.h>
 
 struct alloc_node {
 	sys_sfnode_t node;
@@ -102,8 +103,8 @@ static inline void z_vrfy_k_queue_init(struct k_queue *queue)
 #if !defined(CONFIG_POLL)
 static void prepare_thread_to_run(struct k_thread *thread, void *data)
 {
-	z_ready_thread(thread);
 	z_thread_return_value_set_with_data(thread, 0, data);
+	z_ready_thread(thread);
 }
 #endif /* CONFIG_POLL */
 
@@ -229,9 +230,12 @@ static inline s32_t z_vrfy_k_queue_alloc_prepend(struct k_queue *queue,
 #include <syscalls/k_queue_alloc_prepend_mrsh.c>
 #endif
 
-void k_queue_append_list(struct k_queue *queue, void *head, void *tail)
+int k_queue_append_list(struct k_queue *queue, void *head, void *tail)
 {
-	__ASSERT(head && tail, "invalid head or tail");
+	/* invalid head or tail of list */
+	CHECKIF(head == NULL || tail == NULL) {
+		return -EINVAL;
+	}
 
 	k_spinlock_key_t key = k_spin_lock(&queue->lock);
 #if !defined(CONFIG_POLL)
@@ -257,11 +261,18 @@ void k_queue_append_list(struct k_queue *queue, void *head, void *tail)
 #endif /* !CONFIG_POLL */
 
 	z_reschedule(&queue->lock, key);
+
+	return 0;
 }
 
-void k_queue_merge_slist(struct k_queue *queue, sys_slist_t *list)
+int k_queue_merge_slist(struct k_queue *queue, sys_slist_t *list)
 {
-	__ASSERT(!sys_slist_is_empty(list), "list must not be empty");
+	int ret;
+
+	/* list must not be empty */
+	CHECKIF(sys_slist_is_empty(list)) {
+		return -EINVAL;
+	}
 
 	/*
 	 * note: this works as long as:
@@ -272,50 +283,42 @@ void k_queue_merge_slist(struct k_queue *queue, sys_slist_t *list)
 	 *   flag bytes in the lower order bits of the data pointer
 	 * - source list is really an slist and not an sflist with flags set
 	 */
-	k_queue_append_list(queue, list->head, list->tail);
+	ret = k_queue_append_list(queue, list->head, list->tail);
+	CHECKIF(ret != 0) {
+		return ret;
+	}
 	sys_slist_init(list);
+
+	return 0;
 }
 
 #if defined(CONFIG_POLL)
-static void *k_queue_poll(struct k_queue *queue, s32_t timeout)
+static void *k_queue_poll(struct k_queue *queue, k_timeout_t timeout)
 {
 	struct k_poll_event event;
-	int err, elapsed = 0, done = 0;
+	int err;
 	k_spinlock_key_t key;
 	void *val;
-	u32_t start;
 
 	k_poll_event_init(&event, K_POLL_TYPE_FIFO_DATA_AVAILABLE,
 			  K_POLL_MODE_NOTIFY_ONLY, queue);
 
-	if (timeout != K_FOREVER) {
-		start = k_uptime_get_32();
+	event.state = K_POLL_STATE_NOT_READY;
+	err = k_poll(&event, 1, timeout);
+
+	if (err && err != -EAGAIN) {
+		return NULL;
 	}
 
-	do {
-		event.state = K_POLL_STATE_NOT_READY;
-
-		err = k_poll(&event, 1, timeout - elapsed);
-
-		if (err && err != -EAGAIN) {
-			return NULL;
-		}
-
-		key = k_spin_lock(&queue->lock);
-		val = z_queue_node_peek(sys_sflist_get(&queue->data_q), true);
-		k_spin_unlock(&queue->lock, key);
-
-		if ((val == NULL) && (timeout != K_FOREVER)) {
-			elapsed = k_uptime_get_32() - start;
-			done = elapsed > timeout;
-		}
-	} while (!val && !done);
+	key = k_spin_lock(&queue->lock);
+	val = z_queue_node_peek(sys_sflist_get(&queue->data_q), true);
+	k_spin_unlock(&queue->lock, key);
 
 	return val;
 }
 #endif /* CONFIG_POLL */
 
-void *z_impl_k_queue_get(struct k_queue *queue, s32_t timeout)
+void *z_impl_k_queue_get(struct k_queue *queue, k_timeout_t timeout)
 {
 	k_spinlock_key_t key = k_spin_lock(&queue->lock);
 	void *data;
@@ -329,7 +332,7 @@ void *z_impl_k_queue_get(struct k_queue *queue, s32_t timeout)
 		return data;
 	}
 
-	if (timeout == K_NO_WAIT) {
+	if (K_TIMEOUT_EQ(timeout, K_NO_WAIT)) {
 		k_spin_unlock(&queue->lock, key);
 		return NULL;
 	}
@@ -347,7 +350,8 @@ void *z_impl_k_queue_get(struct k_queue *queue, s32_t timeout)
 }
 
 #ifdef CONFIG_USERSPACE
-static inline void *z_vrfy_k_queue_get(struct k_queue *queue, s32_t timeout)
+static inline void *z_vrfy_k_queue_get(struct k_queue *queue,
+				       k_timeout_t timeout)
 {
 	Z_OOPS(Z_SYSCALL_OBJ(queue, K_OBJ_QUEUE));
 	return z_impl_k_queue_get(queue, timeout);

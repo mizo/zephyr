@@ -1,9 +1,7 @@
-# Kconfig.fe310 - SiFive Freedom UART configuration option
-#
+# SiFive Freedom UART configuration option
+
 # Copyright (c) 2017 Jean-Paul Etienne <fractalclone@gmail.com>
-#
 # SPDX-License-Identifier: Apache-2.0
-#
 
 menuconfig UART_SIFIVE
 	bool "SiFive Freedom serial driver"
@@ -38,7 +36,7 @@ config UART_SIFIVE_PORT_0_RXCNT_IRQ
 
 config UART_SIFIVE_PORT_0_TXCNT_IRQ
 	int "Port 0 TX Interrupt Threshold Count"
-	default 0
+	default 1
 	depends on UART_SIFIVE_PORT_0
 	help
 	  Port 0 TX Threshold at which the TX FIFO interrupt triggers.

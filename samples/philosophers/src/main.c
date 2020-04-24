@@ -83,7 +83,7 @@
 /* end - control behaviour of the demo */
 /***************************************/
 
-#define STACK_SIZE 768
+#define STACK_SIZE (768 + CONFIG_TEST_EXTRA_STACKSIZE)
 
 #include "phil_obj_abstract.h"
 
@@ -166,7 +166,7 @@ void philosopher(void *id, void *unused1, void *unused2)
 
 		delay = get_random_delay(my_id, 25);
 		print_phil_state(my_id, "  EATING  [ %s%d ms ] ", delay);
-		k_sleep(delay);
+		k_msleep(delay);
 
 		drop(fork2);
 		print_phil_state(my_id, "   DROPPED ONE FORK   ", 0);
@@ -174,7 +174,7 @@ void philosopher(void *id, void *unused1, void *unused2)
 
 		delay = get_random_delay(my_id, 25);
 		print_phil_state(my_id, " THINKING [ %s%d ms ] ", delay);
-		k_sleep(delay);
+		k_msleep(delay);
 	}
 
 }
@@ -258,6 +258,6 @@ void main(void)
 	/* Wait a few seconds before main() exit, giving the sample the
 	 * opportunity to dump some output before coverage data gets emitted
 	 */
-	k_sleep(5000);
+	k_sleep(K_MSEC(5000));
 #endif
 }

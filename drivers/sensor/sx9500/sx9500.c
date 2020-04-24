@@ -6,6 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT semtech_sx9500
+
 #include <errno.h>
 
 #include <kernel.h>
@@ -18,8 +20,7 @@
 
 #include "sx9500.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_REGISTER(SX9500);
+LOG_MODULE_REGISTER(SX9500, CONFIG_SENSOR_LOG_LEVEL);
 
 static u8_t sx9500_reg_defaults[] = {
 	/*
@@ -111,14 +112,14 @@ int sx9500_init(struct device *dev)
 {
 	struct sx9500_data *data = dev->driver_data;
 
-	data->i2c_master = device_get_binding(CONFIG_SX9500_I2C_DEV_NAME);
+	data->i2c_master = device_get_binding(DT_INST_BUS_LABEL(0));
 	if (!data->i2c_master) {
 		LOG_DBG("sx9500: i2c master not found: %s",
-		    CONFIG_SX9500_I2C_DEV_NAME);
+		    DT_INST_BUS_LABEL(0));
 		return -EINVAL;
 	}
 
-	data->i2c_slave_addr = CONFIG_SX9500_I2C_ADDR;
+	data->i2c_slave_addr = DT_INST_REG_ADDR(0);
 
 	if (sx9500_init_chip(dev) < 0) {
 		LOG_DBG("sx9500: failed to initialize chip");
@@ -135,6 +136,6 @@ int sx9500_init(struct device *dev)
 
 struct sx9500_data sx9500_data;
 
-DEVICE_AND_API_INIT(sx9500, CONFIG_SX9500_DEV_NAME, sx9500_init, &sx9500_data,
+DEVICE_AND_API_INIT(sx9500, DT_INST_LABEL(0), sx9500_init, &sx9500_data,
 		    NULL, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &sx9500_api_funcs);

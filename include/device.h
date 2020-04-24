@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2015 Intel Corporation.
  *
@@ -70,6 +69,9 @@ extern "C" {
  * \li POST_KERNEL: Used for devices that require kernel services during
  * configuration.
  * \n
+ * \li POST_KERNEL_SMP: Used for devices that require kernel services during
+ * configuration after SMP initialization.
+ * \n
  * \li APPLICATION: Used for application components (i.e. non-kernel components)
  * that need automatic configuration. These devices can use all services
  * provided by the kernel during configuration.
@@ -102,7 +104,7 @@ extern "C" {
 #ifndef CONFIG_DEVICE_POWER_MANAGEMENT
 #define DEVICE_AND_API_INIT(dev_name, drv_name, init_fn, data, cfg_info,  \
 			    level, prio, api)				  \
-	static struct device_config _CONCAT(__config_, dev_name) __used	  \
+	static const struct device_config _CONCAT(__config_, dev_name) __used \
 	__attribute__((__section__(".devconfig.init"))) = {		  \
 		.name = drv_name, .init = (init_fn),			  \
 		.config_info = (cfg_info)				  \
@@ -273,7 +275,7 @@ struct device_config {
  * @param driver_data driver instance data. For driver use only
  */
 struct device {
-	struct device_config *config;
+	const struct device_config *config;
 	const void *driver_api;
 	void *driver_data;
 };
@@ -361,6 +363,13 @@ __syscall struct device *device_get_binding(const char *name);
 #define DEVICE_PM_GET_POWER_STATE       2
 
 #endif /* CONFIG_DEVICE_POWER_MANAGEMENT */
+
+/**
+ * @brief Get name of device PM state
+ *
+ * @param state State id which name should be returned
+ */
+const char *device_pm_state_str(u32_t state);
 
 /**
  * @brief Indicate that the device is in the middle of a transaction
@@ -589,7 +598,8 @@ static inline int device_pm_get_sync(struct device *dev) { return -ENOTSUP; }
 static inline int device_pm_put(struct device *dev) { return -ENOTSUP; }
 static inline int device_pm_put_sync(struct device *dev) { return -ENOTSUP; }
 #endif
-
+#else
+#define device_pm_control_nop(...) NULL
 #endif
 
 /**

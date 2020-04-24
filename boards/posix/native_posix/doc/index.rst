@@ -1,4 +1,3 @@
-
 .. _native_posix:
 
 Native POSIX execution (native_posix)
@@ -517,6 +516,11 @@ The following peripherals are currently provided with this board:
   must be powered down and support Bluetooth Low Energy (i.e. support the
   Bluetooth specification version 4.0 or greater).
 
+**USB controller**:
+  It's possible to use the Virtual USB controller working over USB/IP
+  protocol. More information can be found in
+  :ref:`Testing USB over USP/IP in native_posix <testing_USB_native_posix>`.
+
 **Display driver**:
   A display driver is provided that creates a window on the host machine to
   render display content.
@@ -537,22 +541,14 @@ The following peripherals are currently provided with this board:
 
 **Flash driver**:
   A flash driver is provided that accesses all flash data through a binary file
-  on the host file system.
-
-  The size of the flash device can be configured through the native POSIX board
-  device tree and the sector size is configurable via the Kconfig option
-  :option:`CONFIG_FLASH_NATIVE_POSIX_SECTOR_SIZE`. The sector size will only be
-  used to return flash page layout related information and no restrictions are
-  imposed by the driver based on the configured sector size. As such an erase
-  operation of arbitrary size will succeed on the emulated flash device.
-  Further the emulated device will not impose any write restriction that are
-  applicable for a regular flash device, including changing the state of a bit
-  from zero to one.
+  on the host file system. The behavior of the flash device can be configured
+  through the native POSIX board devicetree or Kconfig settings under
+  :option:`CONFIG_FLASH_SIMULATOR`.
 
   By default the binary data is located in the file *flash.bin* in the current
   working directory. The location of this file can be changed through the
   command line parameter *--flash*. The flash data will be stored in raw format
-  and the file will be truncated to match the size specified in the device tree
+  and the file will be truncated to match the size specified in the devicetree
   configuration. In case the file does not exists the driver will take care of
   creating the file, else the existing file is used.
 
@@ -573,7 +569,7 @@ output to the executable's ``stdin`` and ``stdout``.
 This is chosen by selecting either
 :option:`CONFIG_NATIVE_UART_0_ON_OWN_PTY` or
 :option:`CONFIG_NATIVE_UART_0_ON_STDINOUT`
-For interactive use with the :ref:`shell_label`, choose the first (OWN_PTY) option.
+For interactive use with the :ref:`shell_api`, choose the first (OWN_PTY) option.
 The second (STDINOUT) option can be used with the shell for automated
 testing, such as when piping other processes' output to control it.
 This is because the shell subsystem expects access to a raw terminal,
@@ -665,4 +661,3 @@ these commands::
 
     $ sudo apt-get install pkg-config libfuse-dev:i386
     $ export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
-

@@ -19,16 +19,22 @@
 #include <sys/util.h>
 #include "iis3dhhc_reg.h"
 
+union axis3bit16_t {
+	s16_t i16bit[3];
+	u8_t u8bit[6];
+};
+
 struct iis3dhhc_config {
 	char *master_dev_name;
 	int (*bus_init)(struct device *dev);
 #ifdef CONFIG_IIS3DHHC_TRIGGER
 	const char *int_port;
 	u8_t int_pin;
+	u8_t int_flags;
 #endif
-#ifdef DT_ST_IIS3DHHC_BUS_SPI
+#if DT_ANY_INST_ON_BUS(spi)
 	struct spi_config spi_conf;
-#if defined(DT_INST_0_ST_IIS3DHHC_CS_GPIOS_CONTROLLER)
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
 	const char *gpio_cs_port;
 	u8_t cs_gpio;
 #endif
@@ -39,10 +45,10 @@ struct iis3dhhc_data {
 	struct device *bus;
 	s16_t acc[3];
 
-	iis3dhhc_ctx_t *ctx;
+	stmdev_ctx_t *ctx;
 
-#ifdef DT_ST_IIS3DHHC_BUS_SPI
-	iis3dhhc_ctx_t ctx_spi;
+#if DT_ANY_INST_ON_BUS(spi)
+	stmdev_ctx_t ctx_spi;
 #endif
 
 #ifdef CONFIG_IIS3DHHC_TRIGGER
@@ -62,7 +68,7 @@ struct iis3dhhc_data {
 #endif
 
 #endif /* CONFIG_IIS3DHHC_TRIGGER */
-#if defined(DT_INST_0_ST_IIS3DHHC_CS_GPIOS_CONTROLLER)
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
 	struct spi_cs_control cs_ctrl;
 #endif
 };

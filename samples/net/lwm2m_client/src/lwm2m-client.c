@@ -11,7 +11,7 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
-#include <hwinfo.h>
+#include <drivers/hwinfo.h>
 #include <zephyr.h>
 #include <drivers/gpio.h>
 #include <drivers/sensor.h>
@@ -57,11 +57,13 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #else
 #define DT_ALIAS_LED0_GPIOS_CONTROLLER "(fail)"
 #define DT_ALIAS_LED0_GPIOS_PIN 0
+#define DT_ALIAS_LED0_GPIOS_FLAGS 0
 #endif
 #endif
 
 #define LED_GPIO_PORT DT_ALIAS_LED0_GPIOS_CONTROLLER
 #define LED_GPIO_PIN DT_ALIAS_LED0_GPIOS_PIN
+#define LED_GPIO_FLAGS DT_ALIAS_LED0_GPIOS_FLAGS
 
 static u8_t bat_idx = LWM2M_DEVICE_PWR_SRC_TYPE_BAT_INT;
 static int bat_mv = 3800;
@@ -107,7 +109,7 @@ static int led_on_off_cb(u16_t obj_inst_id, u16_t res_id, u16_t res_inst_id,
 
 	led_val = *(u8_t *) data;
 	if (led_val != led_state) {
-		ret = gpio_pin_write(led_dev, LED_GPIO_PIN, led_val);
+		ret = gpio_pin_set(led_dev, LED_GPIO_PIN, (int) led_val);
 		if (ret) {
 			/*
 			 * We need an extra hook in LWM2M to better handle
@@ -136,12 +138,8 @@ static int init_led_device(void)
 		return -ENODEV;
 	}
 
-	ret = gpio_pin_configure(led_dev, LED_GPIO_PIN, GPIO_DIR_OUT);
-	if (ret) {
-		return ret;
-	}
-
-	ret = gpio_pin_write(led_dev, LED_GPIO_PIN, 0);
+	ret = gpio_pin_configure(led_dev, LED_GPIO_PIN, LED_GPIO_FLAGS |
+							GPIO_OUTPUT_INACTIVE);
 	if (ret) {
 		return ret;
 	}
@@ -196,7 +194,7 @@ static void *temperature_get_buf(u16_t obj_inst_id, u16_t res_id,
 	struct device *dev = NULL;
 
 #if defined(CONFIG_FXOS8700_TEMP)
-	dev = device_get_binding(DT_INST_0_NXP_FXOS8700_LABEL);
+	dev = device_get_binding(DT_LABEL(DT_INST(0, nxp_fxos8700)));
 #endif
 
 	if (dev != NULL) {
@@ -416,6 +414,9 @@ static void rd_client_event(struct lwm2m_ctx *client,
 		LOG_DBG("Disconnected");
 		break;
 
+	case LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF:
+		LOG_DBG("Queue mode RX window closed");
+		break;
 	}
 }
 

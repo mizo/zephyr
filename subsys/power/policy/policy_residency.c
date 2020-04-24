@@ -49,7 +49,7 @@ enum power_states sys_pm_policy_next_state(s32_t ticks)
 {
 	int i;
 
-	if ((ticks != K_FOREVER) && (ticks < pm_min_residency[0])) {
+	if ((ticks != K_TICKS_FOREVER) && (ticks < pm_min_residency[0])) {
 		LOG_DBG("Not enough time for PM operations: %d", ticks);
 		return SYS_POWER_STATE_ACTIVE;
 	}
@@ -60,7 +60,7 @@ enum power_states sys_pm_policy_next_state(s32_t ticks)
 			continue;
 		}
 #endif
-		if ((ticks == K_FOREVER) ||
+		if ((ticks == K_TICKS_FOREVER) ||
 		    (ticks >= pm_min_residency[i])) {
 			LOG_DBG("Selected power state %d "
 					"(ticks: %d, min_residency: %u)",
@@ -71,4 +71,9 @@ enum power_states sys_pm_policy_next_state(s32_t ticks)
 
 	LOG_DBG("No suitable power state found!");
 	return SYS_POWER_STATE_ACTIVE;
+}
+
+__weak bool sys_pm_policy_low_power_devices(enum power_states pm_state)
+{
+	return sys_pm_is_sleep_state(pm_state);
 }

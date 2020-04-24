@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <generated_dts_board.h>
-#include <arch/cpu.h>
-#include <misc/util.h>
+#include <devicetree.h>
+#include <kernel.h>
+#include <sys/util.h>
 
 /* Super-primitive 8250/16550 serial output-only driver, 115200 8n1 */
 
-#define PORT ((io_port_t)DT_UART_NS16550_PORT_0_BASE_ADDR)
+#define PORT ((io_port_t)DT_REG_ADDR(DT_INST(0, ns16550)))
 
 #define REG_IER 0x01	/* Interrupt enable reg.          */
 #define REG_LCR 0x03	/* Line control reg.              */

@@ -8,6 +8,8 @@
  * https://www.st.com/resource/en/datasheet/lis2dw12.pdf
  */
 
+#define DT_DRV_COMPAT st_lis2dw12
+
 #include <kernel.h>
 #include <drivers/sensor.h>
 #include <drivers/gpio.h>
@@ -15,8 +17,7 @@
 
 #include "lis2dw12.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-LOG_MODULE_DECLARE(LIS2DW12);
+LOG_MODULE_DECLARE(LIS2DW12, CONFIG_SENSOR_LOG_LEVEL);
 
 /**
  * lis2dw12_enable_int - enable selected int pin to generate interrupt
@@ -79,7 +80,7 @@ int lis2dw12_trigger_set(struct device *dev,
 			  sensor_trigger_handler_t handler)
 {
 	struct lis2dw12_data *lis2dw12 = dev->driver_data;
-	axis3bit16_t raw;
+	union axis3bit16_t raw;
 	int state = (handler != NULL) ? PROPERTY_ENABLE : PROPERTY_DISABLE;
 
 	switch (trig->type) {
@@ -184,7 +185,8 @@ static void lis2dw12_handle_interrupt(void *arg)
 	}
 #endif /* CONFIG_LIS2DW12_PULSE */
 
-	gpio_pin_enable_callback(lis2dw12->gpio, cfg->int_gpio_pin);
+	gpio_pin_interrupt_configure(lis2dw12->gpio, cfg->int_gpio_pin,
+				     GPIO_INT_EDGE_TO_ACTIVE);
 }
 
 static void lis2dw12_gpio_callback(struct device *dev,
@@ -197,7 +199,8 @@ static void lis2dw12_gpio_callback(struct device *dev,
 		return;
 	}
 
-	gpio_pin_disable_callback(dev, lis2dw12->gpio_pin);
+	gpio_pin_interrupt_configure(dev, lis2dw12->gpio_pin,
+				     GPIO_INT_DISABLE);
 
 #if defined(CONFIG_LIS2DW12_TRIGGER_OWN_THREAD)
 	k_sem_give(&lis2dw12->gpio_sem);
@@ -261,8 +264,7 @@ int lis2dw12_init_interrupt(struct device *dev)
 	lis2dw12->gpio_pin = cfg->int_gpio_pin;
 
 	ret = gpio_pin_configure(lis2dw12->gpio, cfg->int_gpio_pin,
-			   GPIO_DIR_IN | GPIO_INT | GPIO_INT_EDGE |
-			   GPIO_INT_ACTIVE_HIGH | GPIO_INT_DEBOUNCE);
+				 GPIO_INPUT | cfg->int_gpio_flags);
 	if (ret < 0) {
 		LOG_DBG("Could not configure gpio");
 		return ret;
@@ -282,5 +284,6 @@ int lis2dw12_init_interrupt(struct device *dev)
 		return -EIO;
 	}
 
-	return gpio_pin_enable_callback(lis2dw12->gpio, cfg->int_gpio_pin);
+	return gpio_pin_interrupt_configure(lis2dw12->gpio, cfg->int_gpio_pin,
+					    GPIO_INT_EDGE_TO_ACTIVE);
 }

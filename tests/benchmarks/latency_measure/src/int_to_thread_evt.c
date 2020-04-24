@@ -73,7 +73,7 @@ void int_thread(void)
 
 K_THREAD_DEFINE(int_thread_id, 512,
 		(k_thread_entry_t) int_thread, NULL, NULL, NULL,
-		11, 0, K_NO_WAIT);
+		11, 0, 0);
 
 /**
  *
@@ -92,6 +92,6 @@ int int_to_thread_evt(void)
 	k_sem_take(&WORKSEMA, K_FOREVER);
 
 	PRINT_FORMAT(" switch time is %u tcs = %u nsec",
-		     timestamp, SYS_CLOCK_HW_CYCLES_TO_NS(timestamp));
+		     timestamp, (u32_t)k_cyc_to_ns_floor64(timestamp));
 	return 0;
 }

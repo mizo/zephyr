@@ -5,17 +5,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define DT_DRV_COMPAT meas_ms5837
+
 #include <init.h>
 #include <kernel.h>
 #include <sys/byteorder.h>
 #include <drivers/sensor.h>
 #include <sys/__assert.h>
+#include <logging/log.h>
 
 #include "ms5837.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-#include <logging/log.h>
-LOG_MODULE_REGISTER(MS5837);
+LOG_MODULE_REGISTER(MS5837, CONFIG_SENSOR_LOG_LEVEL);
 
 static int ms5837_get_measurement(struct device *i2c_master,
 				  const u8_t i2c_address, u32_t *val,
@@ -31,7 +32,7 @@ static int ms5837_get_measurement(struct device *i2c_master,
 		return err;
 	}
 
-	k_sleep(delay);
+	k_msleep(delay);
 
 	err = i2c_burst_read(i2c_master, i2c_address, adc_read_cmd,
 			((u8_t *)val) + 1, 3);
@@ -260,7 +261,7 @@ static int ms5837_init(struct device *dev)
 	data->i2c_master = device_get_binding(cfg->i2c_name);
 	if (data->i2c_master == NULL) {
 		LOG_ERR("i2c master %s not found",
-			    DT_INST_0_MEAS_MS5837_BUS_NAME);
+			    DT_INST_BUS_LABEL(0));
 		return -EINVAL;
 	}
 
@@ -318,10 +319,10 @@ static int ms5837_init(struct device *dev)
 static struct ms5837_data ms5837_data;
 
 static const struct ms5837_config ms5837_config = {
-	.i2c_name = DT_INST_0_MEAS_MS5837_BUS_NAME,
-	.i2c_address = DT_INST_0_MEAS_MS5837_BASE_ADDRESS
+	.i2c_name = DT_INST_BUS_LABEL(0),
+	.i2c_address = DT_INST_REG_ADDR(0)
 };
 
-DEVICE_AND_API_INIT(ms5837, DT_INST_0_MEAS_MS5837_LABEL, ms5837_init, &ms5837_data,
+DEVICE_AND_API_INIT(ms5837, DT_INST_LABEL(0), ms5837_init, &ms5837_data,
 		    &ms5837_config, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &ms5837_api_funcs);

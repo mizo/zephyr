@@ -17,22 +17,33 @@
 #include <sys/util.h>
 #include "lis2mdl_reg.h"
 
+union axis3bit16_t {
+	s16_t i16bit[3];
+	u8_t u8bit[6];
+};
+
+union axis1bit16_t {
+	s16_t i16bit;
+	u8_t u8bit[2];
+};
+
 struct lis2mdl_config {
 	char *master_dev_name;
 	int (*bus_init)(struct device *dev);
 #ifdef CONFIG_LIS2MDL_TRIGGER
 	char *gpio_name;
 	u32_t gpio_pin;
+	u8_t gpio_flags;
 #endif  /* CONFIG_LIS2MDL_TRIGGER */
-#ifdef DT_ST_LIS2MDL_BUS_I2C
+#if DT_ANY_INST_ON_BUS(i2c)
 	u16_t i2c_slv_addr;
-#elif DT_ST_LIS2MDL_BUS_SPI
+#elif DT_ANY_INST_ON_BUS(spi)
 	struct spi_config spi_conf;
-#if defined(DT_INST_0_ST_LIS2MDL_CS_GPIOS_CONTROLLER)
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
 	const char *gpio_cs_port;
 	u8_t cs_gpio;
-#endif /* DT_INST_0_ST_LIS2MDL_CS_GPIOS_CONTROLLER */
-#endif /* DT_ST_LIS2MDL_BUS_SPI */
+#endif /* DT_INST_SPI_DEV_HAS_CS_GPIOS(0) */
+#endif /* DT_ANY_INST_ON_BUS(spi) */
 };
 
 /* Sensor data */
@@ -42,12 +53,12 @@ struct lis2mdl_data {
 	s16_t mag[3];
 	s32_t temp_sample;
 
-	lis2mdl_ctx_t *ctx;
+	stmdev_ctx_t *ctx;
 
-#ifdef DT_ST_LIS2MDL_BUS_I2C
-	lis2mdl_ctx_t ctx_i2c;
-#elif DT_ST_LIS2MDL_BUS_SPI
-	lis2mdl_ctx_t ctx_spi;
+#if DT_ANY_INST_ON_BUS(i2c)
+	stmdev_ctx_t ctx_i2c;
+#elif DT_ANY_INST_ON_BUS(spi)
+	stmdev_ctx_t ctx_spi;
 #endif
 
 #ifdef CONFIG_LIS2MDL_TRIGGER
@@ -65,9 +76,9 @@ struct lis2mdl_data {
 	struct device *dev;
 #endif  /* CONFIG_LIS2MDL_TRIGGER_GLOBAL_THREAD */
 #endif  /* CONFIG_LIS2MDL_TRIGGER */
-#if defined(DT_INST_0_ST_LIS2MDL_CS_GPIOS_CONTROLLER)
+#if DT_INST_SPI_DEV_HAS_CS_GPIOS(0)
 	struct spi_cs_control cs_ctrl;
-#endif /* DT_INST_0_ST_LIS2MDL_CS_GPIOS_CONTROLLER */
+#endif /* DT_INST_SPI_DEV_HAS_CS_GPIOS(0) */
 };
 
 int lis2mdl_spi_init(struct device *dev);
