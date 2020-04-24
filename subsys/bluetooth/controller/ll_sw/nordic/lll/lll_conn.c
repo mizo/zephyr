@@ -458,7 +458,8 @@ void lll_conn_rx_pkt_set(struct lll_conn *lll)
 	phy = 0U;
 #endif /* !CONFIG_BT_CTLR_PHY */
 
-	radio_phy_set(phy, 0);
+	/* TODO: if coded we use S8? */
+	radio_phy_set(phy, 1);
 
 	if (0) {
 #if defined(CONFIG_BT_CTLR_LE_ENC)
@@ -494,7 +495,8 @@ void lll_conn_tx_pkt_set(struct lll_conn *lll, struct pdu_data *pdu_data_tx)
 	flags = 0U;
 #endif /* !CONFIG_BT_CTLR_PHY */
 
-	radio_phy_set(phy, flags);
+	/* TODO: if coded we use S8? */
+	radio_phy_set(phy, 1);
 
 	if (0) {
 #if defined(CONFIG_BT_CTLR_LE_ENC)

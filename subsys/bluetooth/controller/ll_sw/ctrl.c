@@ -9685,7 +9685,8 @@ static void rx_packet_set(struct connection *conn, struct pdu_data *pdu_data_rx)
 	phy = 0U;
 #endif /* !CONFIG_BT_CTLR_PHY */
 
-	radio_phy_set(phy, 0);
+	/* TODO: if coded we use S8? */
+	radio_phy_set(phy, 1);
 
 	if (conn->enc_rx) {
 		radio_pkt_configure(8, (max_rx_octets + 4), (phy << 1) | 0x01);
