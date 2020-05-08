@@ -11,6 +11,7 @@ zephyr_library_sources(
   scb.c
   irq_init.c
   thread_abort.c
+  version.c
   )
 
 zephyr_linker_sources_ifdef(CONFIG_SW_VECTOR_RELAY

@@ -152,6 +152,8 @@ SECTIONS
 
 #endif /* CONFIG_CODE_DATA_RELOCATION */
 
+#include <arch/arm/aarch32/cortex_m/scripts/version-sections.ld>
+
     SECTION_PROLOGUE(_TEXT_SECTION_NAME,,)
 	{
 	_image_text_start = .;
