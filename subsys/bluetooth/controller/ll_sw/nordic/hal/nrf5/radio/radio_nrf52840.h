@@ -427,6 +427,9 @@ static inline u32_t hal_radio_phy_mode_get(u8_t phy, u8_t flags)
 #if defined(CONFIG_BT_CTLR_PHY_CODED)
 		/* Workaround: nRF52840 Engineering A Errata ID 164 */
 		*(volatile u32_t *)0x4000173c &= ~0x80000000;
+
+		/* Workaround: nRF52840 Rev 1 Errata ID 191 */
+		*(volatile u32_t *)0x40001740 &= 0x7FFFFFFF;
 #endif /* CONFIG_BT_CTLR_PHY_CODED */
 
 		break;
@@ -444,6 +447,11 @@ static inline u32_t hal_radio_phy_mode_get(u8_t phy, u8_t flags)
 		*(volatile u32_t *)0x4000173c =
 				((*(volatile u32_t *)0x4000173c) & 0xFFFFFF00) |
 				0x5C;
+
+		/* Workaround: nRF52840 Rev 1 Errata ID 191 */
+		*(volatile u32_t *)0x40001740 =
+				((*(volatile u32_t *)0x40001740) & 0x7FFF00FF) |
+				0x80000000 | ((u32_t)196 << 8);
 		break;
 #endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}
