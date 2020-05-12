@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Gerson Fernando Budke
+ * Copyright (c) 2019-2020 Gerson Fernando Budke <nandojve@gmail.com>
  * Copyright (c) 2018 Vincent van der Locht
  * Copyright (c) 2017 Justin Watson
  * Copyright (c) 2016 Intel Corporation.
@@ -15,7 +15,12 @@
 #ifndef _ATMEL_SAM4E_SOC_H_
 #define _ATMEL_SAM4E_SOC_H_
 
+#include <sys/util.h>
+
 #ifndef _ASMLANGUAGE
+
+/* Add include for DTS generated information */
+#include <devicetree.h>
 
 #define DONT_USE_CMSIS_INIT
 #define DONT_USE_PREDEFINED_CORE_HANDLERS
@@ -32,8 +37,6 @@
 #else
 #error Library does not support the specified device.
 #endif
-
-#include "soc_pinmap.h"
 
 #include "../common/soc_pmc.h"
 #include "../common/soc_gpio.h"

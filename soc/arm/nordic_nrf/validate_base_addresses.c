@@ -43,7 +43,7 @@
  */
 #define CHECK_DT_REG(lbl, mdk_addr)					\
 	BUILD_ASSERT(							\
-		UTIL_OR(UTIL_NOT(DT_HAS_NODE(DT_NODELABEL(lbl))),	\
+		UTIL_OR(UTIL_NOT(DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(lbl))),\
 			(DT_REG_ADDR(DT_NODELABEL(lbl)) ==		\
 			 (u32_t)(mdk_addr))))
 
@@ -131,4 +131,6 @@ CHECK_DT_REG(uart3, NRF_UARTE3);
 CHECK_DT_REG(uicr, NRF_UICR);
 CHECK_DT_REG(usbd, NRF_USBD);
 CHECK_DT_REG(vmc, NRF_VMC);
-CHECK_DT_REG(wdt, NRF_WDT0);
+CHECK_DT_REG(wdt, NRF_WDT0);	/* this should be the same node as wdt0 */
+CHECK_DT_REG(wdt0, NRF_WDT0);
+CHECK_DT_REG(wdt1, NRF_WDT1);

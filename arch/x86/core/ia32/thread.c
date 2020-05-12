@@ -45,19 +45,19 @@ extern void z_x86_syscall_entry_stub(void);
 NANO_CPU_INT_REGISTER(z_x86_syscall_entry_stub, -1, -1, 0x80, 3);
 #endif /* CONFIG_X86_USERSPACE */
 
-#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+#if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING)
 
 extern int z_float_disable(struct k_thread *thread);
 
 int arch_float_disable(struct k_thread *thread)
 {
-#if defined(CONFIG_LAZY_FP_SHARING)
+#if defined(CONFIG_LAZY_FPU_SHARING)
 	return z_float_disable(thread);
 #else
 	return -ENOSYS;
-#endif /* CONFIG_LAZY_FP_SHARING */
+#endif /* CONFIG_LAZY_FPU_SHARING */
 }
-#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
+#endif /* CONFIG_FPU && CONFIG_FPU_SHARING */
 
 void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 		     size_t stack_size, k_thread_entry_t entry,
@@ -110,8 +110,8 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	 * doesn't care about their state when execution begins
 	 */
 	thread->callee_saved.esp = (unsigned long)initial_frame;
-#if defined(CONFIG_LAZY_FP_SHARING)
+#if defined(CONFIG_LAZY_FPU_SHARING)
 	thread->arch.excNestCount = 0;
-#endif /* CONFIG_LAZY_FP_SHARING */
+#endif /* CONFIG_LAZY_FPU_SHARING */
 	thread->arch.flags = 0;
 }

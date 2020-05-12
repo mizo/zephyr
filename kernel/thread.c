@@ -55,15 +55,9 @@ void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data)
 	 * k_thread_abort from user_cb.
 	 */
 	key = k_spin_lock(&z_thread_monitor_lock);
-
-	_FOREACH_STATIC_THREAD(thread_data) {
-		user_cb(thread_data->init_thread, user_data);
-	}
-
 	for (thread = _kernel.threads; thread; thread = thread->next_thread) {
 		user_cb(thread, user_data);
 	}
-
 	k_spin_unlock(&z_thread_monitor_lock, key);
 #endif
 }
@@ -77,19 +71,11 @@ void k_thread_foreach_unlocked(k_thread_user_cb_t user_cb, void *user_data)
 	__ASSERT(user_cb != NULL, "user_cb can not be NULL");
 
 	key = k_spin_lock(&z_thread_monitor_lock);
-
-	_FOREACH_STATIC_THREAD(thread_data) {
-		k_spin_unlock(&z_thread_monitor_lock, key);
-		user_cb(thread_data->init_thread, user_data);
-		key = k_spin_lock(&z_thread_monitor_lock);
-	}
-
 	for (thread = _kernel.threads; thread; thread = thread->next_thread) {
 		k_spin_unlock(&z_thread_monitor_lock, key);
 		user_cb(thread, user_data);
 		key = k_spin_lock(&z_thread_monitor_lock);
 	}
-
 	k_spin_unlock(&z_thread_monitor_lock, key);
 #endif
 }
@@ -805,11 +791,11 @@ void z_spin_lock_set_owner(struct k_spinlock *l)
 
 int z_impl_k_float_disable(struct k_thread *thread)
 {
-#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+#if defined(CONFIG_FPU) && defined(CONFIG_FPU_SHARING)
 	return arch_float_disable(thread);
 #else
 	return -ENOSYS;
-#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
+#endif /* CONFIG_FPU && CONFIG_FPU_SHARING */
 }
 
 #ifdef CONFIG_USERSPACE

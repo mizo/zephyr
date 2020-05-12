@@ -35,7 +35,6 @@
 #include <stdbool.h>
 #include <debug/gcov.h>
 
-#define IDLE_THREAD_NAME	"idle"
 #define LOG_LEVEL CONFIG_KERNEL_LOG_LEVEL
 #include <logging/log.h>
 LOG_MODULE_REGISTER(os);
@@ -106,11 +105,11 @@ extern void idle(void *unused1, void *unused2, void *unused3);
 void z_bss_zero(void)
 {
 	(void)memset(__bss_start, 0, __bss_end - __bss_start);
-#ifdef DT_CCM_BASE_ADDRESS
+#if DT_HAS_NODE_STATUS_OKAY(DT_CHOSEN(zephyr_ccm))
 	(void)memset(&__ccm_bss_start, 0,
 		     ((u32_t) &__ccm_bss_end - (u32_t) &__ccm_bss_start));
 #endif
-#ifdef DT_DTCM_BASE_ADDRESS
+#if DT_HAS_NODE_STATUS_OKAY(DT_CHOSEN(zephyr_dtcm))
 	(void)memset(&__dtcm_bss_start, 0,
 		     ((u32_t) &__dtcm_bss_end - (u32_t) &__dtcm_bss_start));
 #endif
@@ -147,11 +146,11 @@ void z_data_copy(void)
 	(void)memcpy(&_ramfunc_ram_start, &_ramfunc_rom_start,
 		 (uintptr_t) &_ramfunc_ram_size);
 #endif /* CONFIG_ARCH_HAS_RAMFUNC_SUPPORT */
-#ifdef DT_CCM_BASE_ADDRESS
+#if DT_HAS_NODE_STATUS_OKAY(DT_CHOSEN(zephyr_ccm))
 	(void)memcpy(&__ccm_data_start, &__ccm_data_rom_start,
 		 __ccm_data_end - __ccm_data_start);
 #endif
-#ifdef DT_DTCM_BASE_ADDRESS
+#if DT_HAS_NODE_STATUS_OKAY(DT_CHOSEN(zephyr_dtcm))
 	(void)memcpy(&__dtcm_data_start, &__dtcm_data_rom_start,
 		 __dtcm_data_end - __dtcm_data_start);
 #endif
@@ -214,7 +213,7 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 
 	z_sys_post_kernel = true;
 
-	z_sys_device_do_config_level(_SYS_INIT_LEVEL_POST_KERNEL);
+	z_sys_init_run_level(_SYS_INIT_LEVEL_POST_KERNEL);
 #if CONFIG_STACK_POINTER_RANDOM
 	z_stack_adjust_initialized = 1;
 #endif
@@ -234,9 +233,6 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 #endif
 #endif
 
-	/* Final init level before app starts */
-	z_sys_device_do_config_level(_SYS_INIT_LEVEL_APPLICATION);
-
 #ifdef CONFIG_CPLUSPLUS
 	/* Process the .ctors and .init_array sections */
 	extern void __do_global_ctors_aux(void);
@@ -245,11 +241,14 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 	__do_init_array_aux();
 #endif
 
+	/* Final init level before app starts */
+	z_sys_init_run_level(_SYS_INIT_LEVEL_APPLICATION);
+
 	z_init_static_threads();
 
 #ifdef CONFIG_SMP
 	z_smp_init();
-	z_sys_device_do_config_level(_SYS_INIT_LEVEL_SMP);
+	z_sys_init_run_level(_SYS_INIT_LEVEL_SMP);
 #endif
 
 #ifdef CONFIG_BOOT_TIME_MEASUREMENT
@@ -280,11 +279,22 @@ void __weak main(void)
 /* LCOV_EXCL_STOP */
 
 #if defined(CONFIG_MULTITHREADING)
-static void init_idle_thread(struct k_thread *thread, k_thread_stack_t *stack)
+static void init_idle_thread(int i)
 {
+	struct k_thread *thread = &z_idle_threads[i];
+	k_thread_stack_t *stack = z_idle_stacks[i];
+
+#ifdef CONFIG_THREAD_NAME
+	char tname[8];
+
+	snprintk(tname, 8, "idle %02d", i);
+#else
+	char *tname = NULL;
+#endif /* CONFIG_THREAD_NAME */
+
 	z_setup_new_thread(thread, stack,
 			  CONFIG_IDLE_STACK_SIZE, idle, NULL, NULL, NULL,
-			  K_LOWEST_THREAD_PRIO, K_ESSENTIAL, IDLE_THREAD_NAME);
+			  K_LOWEST_THREAD_PRIO, K_ESSENTIAL, tname);
 	z_mark_thread_as_started(thread);
 
 #ifdef CONFIG_SMP
@@ -354,7 +364,7 @@ static void prepare_multithreading(struct k_thread *dummy_thread)
 	z_ready_thread(&z_main_thread);
 
 	for (int i = 0; i < CONFIG_MP_NUM_CPUS; i++) {
-		init_idle_thread(&z_idle_threads[i], z_idle_stacks[i]);
+		init_idle_thread(i);
 		_kernel.cpus[i].idle_thread = &z_idle_threads[i];
 		_kernel.cpus[i].id = i;
 		_kernel.cpus[i].irq_stack =
@@ -478,8 +488,8 @@ FUNC_NORETURN void z_cstart(void)
 #endif
 
 	/* perform basic hardware initialization */
-	z_sys_device_do_config_level(_SYS_INIT_LEVEL_PRE_KERNEL_1);
-	z_sys_device_do_config_level(_SYS_INIT_LEVEL_PRE_KERNEL_2);
+	z_sys_init_run_level(_SYS_INIT_LEVEL_PRE_KERNEL_1);
+	z_sys_init_run_level(_SYS_INIT_LEVEL_PRE_KERNEL_2);
 
 #ifdef CONFIG_STACK_CANARIES
 	z_early_boot_rand_get((u8_t *)&stack_guard, sizeof(stack_guard));

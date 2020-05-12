@@ -212,7 +212,8 @@ static inline uint32_t gpio_stm32_pin_to_exti_line(int pin)
 	return ((pin % 4 * 4) << 16) | (pin / 4);
 #elif defined(CONFIG_SOC_SERIES_STM32MP1X)
 	return (((pin * 8) % 32) << 16) | (pin / 4);
-#elif defined(CONFIG_SOC_SERIES_STM32G0X)
+#elif defined(CONFIG_SOC_SERIES_STM32G0X) || \
+	defined(CONFIG_SOC_SERIES_STM32L5X)
 	return ((pin & 0x3) << (16 + 3)) | (pin >> 2);
 #else
 	return (0xF << ((pin % 4 * 4) + 16)) | (pin / 4);
@@ -238,7 +239,8 @@ static void gpio_stm32_set_exti_source(int port, int pin)
 	LL_GPIO_AF_SetEXTISource(port, line);
 #elif CONFIG_SOC_SERIES_STM32MP1X
 	LL_EXTI_SetEXTISource(port, line);
-#elif defined(CONFIG_SOC_SERIES_STM32G0X)
+#elif defined(CONFIG_SOC_SERIES_STM32G0X) || \
+	defined(CONFIG_SOC_SERIES_STM32L5X)
 	LL_EXTI_SetEXTISource(port, line);
 #else
 	LL_SYSCFG_SetEXTISource(port, line);
@@ -254,7 +256,8 @@ static int gpio_stm32_get_exti_source(int pin)
 	port = LL_GPIO_AF_GetEXTISource(line);
 #elif CONFIG_SOC_SERIES_STM32MP1X
 	port = LL_EXTI_GetEXTISource(line);
-#elif defined(CONFIG_SOC_SERIES_STM32G0X)
+#elif defined(CONFIG_SOC_SERIES_STM32G0X) || \
+	defined(CONFIG_SOC_SERIES_STM32L5X)
 	port = LL_EXTI_GetEXTISource(line);
 #else
 	port = LL_SYSCFG_GetEXTISource(line);
@@ -308,7 +311,7 @@ static int gpio_stm32_enable_int(int port, int pin)
 
 static int gpio_stm32_port_get_raw(struct device *dev, u32_t *value)
 {
-	const struct gpio_stm32_config *cfg = dev->config->config_info;
+	const struct gpio_stm32_config *cfg = dev->config_info;
 	GPIO_TypeDef *gpio = (GPIO_TypeDef *)cfg->base;
 
 	*value = LL_GPIO_ReadInputPort(gpio);
@@ -320,7 +323,7 @@ static int gpio_stm32_port_set_masked_raw(struct device *dev,
 					  gpio_port_pins_t mask,
 					  gpio_port_value_t value)
 {
-	const struct gpio_stm32_config *cfg = dev->config->config_info;
+	const struct gpio_stm32_config *cfg = dev->config_info;
 	GPIO_TypeDef *gpio = (GPIO_TypeDef *)cfg->base;
 	u32_t port_value;
 
@@ -333,7 +336,7 @@ static int gpio_stm32_port_set_masked_raw(struct device *dev,
 static int gpio_stm32_port_set_bits_raw(struct device *dev,
 					gpio_port_pins_t pins)
 {
-	const struct gpio_stm32_config *cfg = dev->config->config_info;
+	const struct gpio_stm32_config *cfg = dev->config_info;
 	GPIO_TypeDef *gpio = (GPIO_TypeDef *)cfg->base;
 
 	/*
@@ -348,7 +351,7 @@ static int gpio_stm32_port_set_bits_raw(struct device *dev,
 static int gpio_stm32_port_clear_bits_raw(struct device *dev,
 					  gpio_port_pins_t pins)
 {
-	const struct gpio_stm32_config *cfg = dev->config->config_info;
+	const struct gpio_stm32_config *cfg = dev->config_info;
 	GPIO_TypeDef *gpio = (GPIO_TypeDef *)cfg->base;
 
 #ifdef CONFIG_SOC_SERIES_STM32F1X
@@ -368,7 +371,7 @@ static int gpio_stm32_port_clear_bits_raw(struct device *dev,
 static int gpio_stm32_port_toggle_bits(struct device *dev,
 				       gpio_port_pins_t pins)
 {
-	const struct gpio_stm32_config *cfg = dev->config->config_info;
+	const struct gpio_stm32_config *cfg = dev->config_info;
 	GPIO_TypeDef *gpio = (GPIO_TypeDef *)cfg->base;
 
 	/*
@@ -386,7 +389,7 @@ static int gpio_stm32_port_toggle_bits(struct device *dev,
 static int gpio_stm32_config(struct device *dev,
 			     gpio_pin_t pin, gpio_flags_t flags)
 {
-	const struct gpio_stm32_config *cfg = dev->config->config_info;
+	const struct gpio_stm32_config *cfg = dev->config_info;
 	int err = 0;
 	int pincfg;
 
@@ -425,7 +428,7 @@ static int gpio_stm32_pin_interrupt_configure(struct device *dev,
 		gpio_pin_t pin, enum gpio_int_mode mode,
 		enum gpio_int_trig trig)
 {
-	const struct gpio_stm32_config *cfg = dev->config->config_info;
+	const struct gpio_stm32_config *cfg = dev->config_info;
 	struct gpio_stm32_data *data = dev->driver_data;
 	int edge = 0;
 	int err = 0;
@@ -540,7 +543,7 @@ static const struct gpio_driver_api gpio_stm32_driver = {
  */
 static int gpio_stm32_init(struct device *device)
 {
-	const struct gpio_stm32_config *cfg = device->config->config_info;
+	const struct gpio_stm32_config *cfg = device->config_info;
 
 	/* enable clock for subsystem */
 	struct device *clk =
@@ -595,49 +598,49 @@ static int gpio_stm32_init(struct device *device)
 			 DT_CLOCKS_CELL(DT_NODELABEL(gpio##__suffix), bits),\
 			 DT_CLOCKS_CELL(DT_NODELABEL(gpio##__suffix), bus))
 
-#if DT_HAS_NODE(DT_NODELABEL(gpioa))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioa))
 GPIO_DEVICE_INIT_STM32(a, A);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpioa)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioa)) */
 
-#if DT_HAS_NODE(DT_NODELABEL(gpiob))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpiob))
 GPIO_DEVICE_INIT_STM32(b, B);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpiob)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpiob)) */
 
-#if DT_HAS_NODE(DT_NODELABEL(gpioc))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioc))
 GPIO_DEVICE_INIT_STM32(c, C);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpioc)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioc)) */
 
-#if DT_HAS_NODE(DT_NODELABEL(gpiod))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpiod))
 GPIO_DEVICE_INIT_STM32(d, D);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpiod)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpiod)) */
 
-#if DT_HAS_NODE(DT_NODELABEL(gpioe))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioe))
 GPIO_DEVICE_INIT_STM32(e, E);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpioe)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioe)) */
 
-#if DT_HAS_NODE(DT_NODELABEL(gpiof))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpiof))
 GPIO_DEVICE_INIT_STM32(f, F);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpiof)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpiof)) */
 
-#if DT_HAS_NODE(DT_NODELABEL(gpiog))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpiog))
 GPIO_DEVICE_INIT_STM32(g, G);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpiog)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpiog)) */
 
-#if DT_HAS_NODE(DT_NODELABEL(gpioh))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioh))
 GPIO_DEVICE_INIT_STM32(h, H);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpioh)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioh)) */
 
-#if DT_HAS_NODE(DT_NODELABEL(gpioi))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioi))
 GPIO_DEVICE_INIT_STM32(i, I);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpioi)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioi)) */
 
-#if DT_HAS_NODE(DT_NODELABEL(gpioj))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioj))
 GPIO_DEVICE_INIT_STM32(j, J);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpioj)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpioj)) */
 
-#if DT_HAS_NODE(DT_NODELABEL(gpiok))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpiok))
 GPIO_DEVICE_INIT_STM32(k, K);
-#endif /* DT_HAS_NODE(DT_NODELABEL(gpiok)) */
+#endif /* DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(gpiok)) */
 
 
 #if defined(CONFIG_SOC_SERIES_STM32F1X)

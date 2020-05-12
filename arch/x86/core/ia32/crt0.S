@@ -85,7 +85,7 @@ __csSet:
 #endif /* CONFIG_SET_GDT */
 
 
-#if !defined(CONFIG_FLOAT)
+#if !defined(CONFIG_FPU)
 	/*
 	 * Force an #NM exception for floating point instructions
 	 * since FP support hasn't been configured
@@ -126,7 +126,7 @@ __csSet:
 
   #endif /* CONFIG_SSE */
 
-#endif /* !CONFIG_FLOAT */
+#endif /* !CONFIG_FPU */
 
 	/*
 	 * Set the stack pointer to the area used for the interrupt stack.
@@ -236,6 +236,9 @@ __csSet:
 	lidt	z_x86_idt		/* load 32-bit operand size IDT */
 
 #ifdef CONFIG_LOAPIC
+	/* For BSP, cpu_number is 0 */
+	xorl	%eax, %eax
+	pushl	%eax
 	call	z_loapic_enable
 #endif
 

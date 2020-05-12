@@ -18,6 +18,7 @@
 #define ER32KSEL_LPO1KHZ	(3)
 
 #define LPUART0SRC_OSCERCLK	(1)
+#define TPMSRC_MCGPLLCLK	(1)
 
 #define CLKDIV1_DIVBY2		(1)
 
@@ -66,8 +67,15 @@ static ALWAYS_INLINE void clock_init(void)
 
 	CLOCK_SetSimConfig(&simConfig);
 
-#if DT_HAS_NODE(DT_NODELABEL(lpuart0))
+#if DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(lpuart0))
 	CLOCK_SetLpuartClock(LPUART0SRC_OSCERCLK);
+#endif
+
+#if defined(CONFIG_PWM) && \
+	(DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(pwm0)) || \
+	 DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(pwm1)) || \
+	 DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(pwm2)))
+	CLOCK_SetTpmClock(TPMSRC_MCGPLLCLK);
 #endif
 }
 

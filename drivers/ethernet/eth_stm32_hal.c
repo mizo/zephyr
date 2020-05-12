@@ -24,15 +24,16 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <drivers/clock_control.h>
 #include <drivers/clock_control/stm32_clock_control.h>
 
+#include "eth.h"
 #include "eth_stm32_hal_priv.h"
 
 #if defined(CONFIG_ETH_STM32_HAL_USE_DTCM_FOR_DMA_BUFFER) && \
-    !defined(DT_DTCM_BASE_ADDRESS)
-#error DTCM for DMA buffer is activated but DT_DTCM_BASE_ADDRESS is not present
+	    !DT_HAS_NODE_STATUS_OKAY(DT_CHOSEN(zephyr_dtcm))
+#error DTCM for DMA buffer is activated but zephyr,dtcm is not present in dts
 #endif
 
 #if defined(CONFIG_ETH_STM32_HAL_USE_DTCM_FOR_DMA_BUFFER) && \
-    defined(DT_DTCM_BASE_ADDRESS)
+	    DT_HAS_NODE_STATUS_OKAY(DT_CHOSEN(zephyr_dtcm))
 static ETH_DMADescTypeDef dma_rx_desc_tab[ETH_RXBUFNB] __dtcm_noinit_section;
 static ETH_DMADescTypeDef dma_tx_desc_tab[ETH_TXBUFNB] __dtcm_noinit_section;
 static u8_t dma_rx_buffer[ETH_RXBUFNB][ETH_RX_BUF_SIZE] __dtcm_noinit_section;
@@ -362,15 +363,7 @@ void HAL_ETH_RxCpltCallback(ETH_HandleTypeDef *heth_handle)
 #if defined(CONFIG_ETH_STM32_HAL_RANDOM_MAC)
 static void generate_mac(u8_t *mac_addr)
 {
-	u32_t entropy;
-
-	entropy = sys_rand32_get();
-
-	mac_addr[0] |= 0x02; /* force LAA bit */
-
-	mac_addr[3] = entropy >> 16;
-	mac_addr[4] = entropy >> 8;
-	mac_addr[5] = entropy >> 0;
+	gen_random_mac(mac_addr, ST_OUI_B0, ST_OUI_B1, ST_OUI_B2);
 }
 #endif
 

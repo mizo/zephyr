@@ -16,7 +16,17 @@ The following sections provide detailed lists of changes by component.
 Security Vulnerability Related
 ******************************
 
-No security vulnerabilities received.
+The following CVEs are addressed by this release:
+
+* CVE-2020-10022: UpdateHub Module Copies a Variable-Sized Hash String
+  into a fixed-size array.
+* CVE-2020-10059: UpdateHub Module Explicitly Disables TLS
+  Verification
+* CVE-2020-10062: Under embargo until 2020/05/25
+* CVE-2020-10063: Under embargo until 2020/05/25
+
+More detailed information can be found in:
+https://docs.zephyrproject.org/latest/security/vulnerabilities.html
 
 API Changes
 ***********
@@ -90,6 +100,23 @@ Stable API changes in this release
 
   * The net_idx parameter has been removed from the Health Client model
     APIs since it can be derived (by the stack) from the app_idx parameter
+
+* Networking
+
+  * The NET_DEVICE_INIT(), NET_DEVICE_INIT_INSTANCE(), NET_DEVICE_OFFLOAD_INIT()
+    and ETH_NET_DEVICE_INIT() macros changed and take a device power management
+    function pointer parameter. If networking PM is not implemented for the
+    specific network device, the device_pm_control_nop value can be used.
+
+* Video
+
+  * The video_dequeue() API call now takes a k_timeout_t for the timeout
+    parameter. This reverts to s32_t if CONFIG_LEGACY_TIMEOUT_API is enabled.
+
+* Floating Point Services
+
+  * FLOAT and FP_SHARING Kconfig options have been renamed to FPU and FPU_SHARING,
+    respectively.
 
 Kernel
 ******

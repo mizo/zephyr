@@ -472,6 +472,7 @@ if(EXISTS ${CMAKE_BINARY_DIR}/zephyr_modules.txt)
 
     string(TOUPPER ${module_name} MODULE_NAME_UPPER)
     set(ZEPHYR_${MODULE_NAME_UPPER}_MODULE_DIR ${module_path})
+    set(ZEPHYR_${MODULE_NAME_UPPER}_MODULE_DIR ${module_path} PARENT_SCOPE)
   endforeach()
 
   foreach(module_name ${module_names})
@@ -1213,10 +1214,15 @@ endif()
 if(CONFIG_OUTPUT_DISASSEMBLY)
   set(out_disassembly_cmd    "")
   set(out_disassembly_byprod "")
+  if(CONFIG_OUTPUT_DISASSEMBLE_ALL)
+    set(disassembly_type DISASSEMBLE_ALL)
+  else()
+    set(disassembly_type DISASSEMBLE_SOURCE)
+  endif()
   bintools_objdump(
     RESULT_CMD_LIST    out_disassembly_cmd
     RESULT_BYPROD_LIST out_disassembly_byprod
-    DISASSEMBLE_SOURCE
+    ${disassembly_type}
     FILE_INPUT         ${KERNEL_ELF_NAME}
     FILE_OUTPUT        ${KERNEL_LST_NAME}
     )
