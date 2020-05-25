@@ -830,11 +830,6 @@ static int le_adv_set_private_addr(struct bt_le_ext_adv *adv)
 	bt_addr_t nrpa;
 	int err;
 
-	if (IS_ENABLED(CONFIG_BT_EXT_ADV) &&
-	    BT_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
-		return le_set_private_addr(adv->id);
-	}
-
 	err = bt_rand(nrpa.val, sizeof(nrpa.val));
 	if (err) {
 		return err;
@@ -1780,7 +1775,7 @@ static int hci_le_read_phy(struct bt_conn *conn)
 	cp->handle = sys_cpu_to_le16(conn->handle);
 
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_LE_READ_PHY, buf, &rsp);
-	if (!buf) {
+	if (err) {
 		return err;
 	}
 
@@ -2641,7 +2636,8 @@ int bt_unpair(u8_t id, const bt_addr_le_t *addr)
 		return -EINVAL;
 	}
 
-	if (!addr || !bt_addr_le_cmp(addr, BT_ADDR_LE_ANY)) {
+	if (IS_ENABLED(CONFIG_BT_SMP) &&
+	    (!addr || !bt_addr_le_cmp(addr, BT_ADDR_LE_ANY))) {
 		bt_foreach_bond(id, unpair_remote, &id);
 		return 0;
 	}

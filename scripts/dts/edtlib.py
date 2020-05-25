@@ -153,7 +153,8 @@ class EDT:
     """
     def __init__(self, dts, bindings_dirs, warn_file=None,
                  warn_reg_unit_address_mismatch=True,
-                 default_prop_types=True):
+                 default_prop_types=True,
+                 support_fixed_partitions_on_any_bus=True):
         """
         EDT constructor. This is the top-level entry point to the library.
 
@@ -175,6 +176,11 @@ class EDT:
         default_prop_types (default: True):
           If True, default property types will be used when a node has no
           bindings.
+
+        support_fixed_partitions_on_any_bus (default True):
+          If True, set the Node.bus for 'fixed-partitions' compatible nodes
+          to None.  This allows 'fixed-partitions' binding to match regardless
+          of the bus the 'fixed-partition' is under.
         """
         # Do this indirection with None in case sys.stderr is deliberately
         # overridden
@@ -182,6 +188,7 @@ class EDT:
 
         self._warn_reg_unit_address_mismatch = warn_reg_unit_address_mismatch
         self._default_prop_types = default_prop_types
+        self._fixed_partitions_no_bus = support_fixed_partitions_on_any_bus
 
         self.dts_path = dts
         self.bindings_dirs = bindings_dirs
@@ -521,7 +528,11 @@ class EDT:
             node = Node()
             node.edt = self
             node._node = dt_node
-            node.bus_node = node._bus_node()
+            if "compatible" in node._node.props:
+                node.compats = node._node.props["compatible"].to_strings()
+            else:
+                node.compats = []
+            node.bus_node = node._bus_node(self._fixed_partitions_no_bus)
             node._init_binding()
             node._init_regs()
 
@@ -1058,8 +1069,7 @@ class Node:
         # initialized, which is guaranteed by going through the nodes in
         # node_iter() order.
 
-        if "compatible" in self._node.props:
-            self.compats = self._node.props["compatible"].to_strings()
+        if self.compats:
             on_bus = self.on_bus
 
             for compat in self.compats:
@@ -1074,8 +1084,6 @@ class Node:
             # No 'compatible' property. See if the parent binding has a
             # 'child-binding:' key that gives the binding (or a legacy
             # 'sub-node:' key).
-
-            self.compats = []
 
             binding_from_parent = self._binding_from_parent()
             if binding_from_parent:
@@ -1110,12 +1118,20 @@ class Node:
 
         return None
 
-    def _bus_node(self):
+    def _bus_node(self, support_fixed_partitions_on_any_bus = True):
         # Returns the value for self.bus_node. Relies on parent nodes being
         # initialized before their children.
 
         if not self.parent:
             # This is the root node
+            return None
+
+        # Treat 'fixed-partitions' as if they are not on any bus.  The reason is
+        # that flash nodes might be on a SPI or controller or SoC bus.  Having
+        # bus be None means we'll always match the binding for fixed-partitions
+        # also this means want processing the fixed-partitions node we wouldn't
+        # try to do anything bus specific with it.
+        if support_fixed_partitions_on_any_bus and "fixed-partitions" in self.compats:
             return None
 
         if self.parent.bus:
@@ -2332,7 +2348,7 @@ _DEFAULT_PROP_TYPES = {
     "reg": "array",
     "reg-names": "string-array",
     "label": "string",
-    "interrupt": "array",
+    "interrupts": "array",
     "interrupts-extended": "compound",
     "interrupt-names": "string-array",
     "interrupt-controller": "boolean",

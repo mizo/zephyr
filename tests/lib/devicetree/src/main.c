@@ -141,19 +141,19 @@ static void test_inst_props(void)
 
 static void test_has_path(void)
 {
-	zassert_equal(DT_HAS_NODE_STATUS_OKAY(DT_PATH(test, gpio_0)), 0,
+	zassert_equal(DT_NODE_HAS_STATUS(DT_PATH(test, gpio_0), okay), 0,
 		      "gpio@0");
-	zassert_equal(DT_HAS_NODE_STATUS_OKAY(DT_PATH(test, gpio_deadbeef)), 1,
+	zassert_equal(DT_NODE_HAS_STATUS(DT_PATH(test, gpio_deadbeef), okay), 1,
 		      "gpio@deadbeef");
-	zassert_equal(DT_HAS_NODE_STATUS_OKAY(DT_PATH(test, gpio_abcd1234)), 1,
+	zassert_equal(DT_NODE_HAS_STATUS(DT_PATH(test, gpio_abcd1234), okay), 1,
 		      "gpio@abcd1234");
 }
 
 static void test_has_alias(void)
 {
-	zassert_equal(DT_HAS_NODE_STATUS_OKAY(DT_ALIAS(test_alias)), 1,
+	zassert_equal(DT_NODE_HAS_STATUS(DT_ALIAS(test_alias), okay), 1,
 		      "test-alias");
-	zassert_equal(DT_HAS_NODE_STATUS_OKAY(DT_ALIAS(test_undef)), 0,
+	zassert_equal(DT_NODE_HAS_STATUS(DT_ALIAS(test_undef), okay), 0,
 		      "test-undef");
 }
 
@@ -172,12 +172,13 @@ static void test_inst_checks(void)
 
 static void test_has_nodelabel(void)
 {
-	zassert_equal(DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(disabled_gpio)), 0,
+	zassert_equal(DT_NODE_HAS_STATUS(DT_NODELABEL(disabled_gpio), okay), 0,
 		      "disabled_gpio");
-	zassert_equal(DT_HAS_NODE_STATUS_OKAY(DT_NODELABEL(test_nodelabel)), 1,
+	zassert_equal(DT_NODE_HAS_STATUS(DT_NODELABEL(test_nodelabel), okay), 1,
 		      "test_nodelabel");
-	zassert_equal(DT_HAS_NODE_STATUS_OKAY(
-		      DT_NODELABEL(test_nodelabel_allcaps)), 1,
+	zassert_equal(DT_NODE_HAS_STATUS(DT_NODELABEL(test_nodelabel_allcaps),
+					 okay),
+		      1,
 		      "TEST_NODELABEL_ALLCAPS");
 }
 
@@ -1220,7 +1221,7 @@ static inline struct test_gpio_data *to_data(struct device *dev)
 
 static inline const struct test_gpio_info *to_info(struct device *dev)
 {
-	return (struct test_gpio_info *)dev->config_info;
+	return (const struct test_gpio_info *)dev->config_info;
 }
 
 static void test_devices(void)
@@ -1403,30 +1404,40 @@ static void test_parent(void)
 		     "round trip through node with no compatible");
 }
 
+#undef DT_DRV_COMPAT
+#define DT_DRV_COMPAT vnd_child_bindings
 static void test_child_nodes_list(void)
 {
 	#define TEST_FUNC(child) { DT_PROP(child, val) },
-	#define TEST_MKSTR(a) _TEST_MKSTR(a)
-	#define _TEST_MKSTR(a) #a
-	#define TEST_PARENT DT_PATH(test, test_children)
-	static struct {
-		const char *v;
-	} vals[] = {
+	#define TEST_PARENT DT_PARENT(DT_NODELABEL(test_child_a))
+
+	struct vnd_child_binding {
+		int val;
+	};
+
+	struct vnd_child_binding vals[] = {
 		DT_FOREACH_CHILD(TEST_PARENT, TEST_FUNC)
+	};
+
+	struct vnd_child_binding vals_inst[] = {
+		DT_INST_FOREACH_CHILD(0, TEST_FUNC)
 	};
 
 	zassert_equal(ARRAY_SIZE(vals), 3,
 		      "Bad number of children");
+	zassert_equal(ARRAY_SIZE(vals_inst), 3,
+		      "Bad number of children");
 
-	zassert_false(strlen(TEST_MKSTR(TEST_PARENT)) == 0,
+	zassert_false(strlen(STRINGIFY(TEST_PARENT)) == 0,
 		      "TEST_PARENT evaluated to empty string");
 
-	zassert_equal(vals[0].v, "zero", "Child 0 did not match");
-	zassert_equal(vals[1].v, "one", "Child 1 did not match");
-	zassert_equal(vals[2].v, "two", "Child 2 did not match");
+	zassert_equal(vals[0].val, 0, "Child 0 did not match");
+	zassert_equal(vals[1].val, 1, "Child 1 did not match");
+	zassert_equal(vals[2].val, 2, "Child 2 did not match");
+	zassert_equal(vals_inst[0].val, 0, "Child 0 did not match");
+	zassert_equal(vals_inst[1].val, 1, "Child 1 did not match");
+	zassert_equal(vals_inst[2].val, 2, "Child 2 did not match");
 
-	#undef TEST_MKSTR
-	#undef _TEST_MKSTR
 	#undef TEST_PARENT
 	#undef TEST_FUNC
 }

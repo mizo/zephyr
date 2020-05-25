@@ -173,8 +173,9 @@ static int nr_isr_devs;
 
 static struct device *isr_devs[GPIO_INTEL_APL_NR_SUBDEVS];
 
-static int gpio_intel_apl_isr(struct device *dev)
+static void gpio_intel_apl_isr(void *arg)
 {
+	struct device *dev = (struct device *)arg;
 	const struct gpio_intel_apl_config *cfg;
 	struct gpio_intel_apl_data *data;
 	struct gpio_callback *cb, *tmp;
@@ -203,8 +204,6 @@ static int gpio_intel_apl_isr(struct device *dev)
 		/* clear handled interrupt bits */
 		sys_write32(acc_mask, reg);
 	}
-
-	return 0;
 }
 
 static int gpio_intel_apl_config(struct device *dev,
@@ -330,6 +329,17 @@ static int gpio_intel_apl_pin_interrupt_configure(struct device *dev,
 	} else {
 		/* cannot enable interrupt without pin as input */
 		if ((cfg0 & PAD_CFG0_RXDIS) != 0U) {
+			return -ENOTSUP;
+		}
+
+		/*
+		 * Do not enable interrupt with pin as output.
+		 * Hardware does not seem to support triggering
+		 * interrupt by setting line as both input/output
+		 * and then setting output to desired level.
+		 * So just say not supported.
+		 */
+		if ((cfg0 & PAD_CFG0_TXDIS) == 0U) {
 			return -ENOTSUP;
 		}
 
@@ -572,7 +582,7 @@ int gpio_intel_apl_init(struct device *dev)
 
 	/* route to IRQ 14 */
 
-	sys_bitfield_clear_bit(data->pad_base + REG_MISCCFG,
+	sys_bitfield_clear_bit(cfg->reg_base + REG_MISCCFG,
 			       MISCCFG_IRQ_ROUTE_POS);
 
 	dev->driver_api = &gpio_intel_apl_api;

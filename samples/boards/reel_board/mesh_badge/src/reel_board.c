@@ -11,6 +11,7 @@
 #include <display/cfb.h>
 #include <sys/printk.h>
 #include <drivers/flash.h>
+#include <storage/flash_map.h>
 #include <drivers/sensor.h>
 
 #include <string.h>
@@ -46,12 +47,6 @@ struct font_info {
 #define LONG_PRESS_TIMEOUT K_SECONDS(1)
 
 #define STAT_COUNT 128
-
-#if DT_PHA_HAS_CELL(DT_ALIAS(sw0), gpios, flags)
-#define PULL_UP DT_GPIO_FLAGS(DT_ALIAS(sw0), gpios)
-#else
-#define PULL_UP 0
-#endif
 
 static struct device *epd_dev;
 static bool pressed;
@@ -585,8 +580,8 @@ static int erase_storage(void)
 
 	dev = device_get_binding(DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL);
 
-	return flash_erase(dev, DT_FLASH_AREA_STORAGE_OFFSET,
-			   DT_FLASH_AREA_STORAGE_SIZE);
+	return flash_erase(dev, FLASH_AREA_OFFSET(storage),
+			   FLASH_AREA_SIZE(storage));
 }
 
 void board_refresh_display(void)

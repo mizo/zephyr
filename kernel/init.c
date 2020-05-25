@@ -34,6 +34,7 @@
 #include <tracing/tracing.h>
 #include <stdbool.h>
 #include <debug/gcov.h>
+#include <kswap.h>
 
 #define LOG_LEVEL CONFIG_KERNEL_LOG_LEVEL
 #include <logging/log.h>
@@ -105,11 +106,11 @@ extern void idle(void *unused1, void *unused2, void *unused3);
 void z_bss_zero(void)
 {
 	(void)memset(__bss_start, 0, __bss_end - __bss_start);
-#if DT_HAS_NODE_STATUS_OKAY(DT_CHOSEN(zephyr_ccm))
+#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_ccm), okay)
 	(void)memset(&__ccm_bss_start, 0,
 		     ((u32_t) &__ccm_bss_end - (u32_t) &__ccm_bss_start));
 #endif
-#if DT_HAS_NODE_STATUS_OKAY(DT_CHOSEN(zephyr_dtcm))
+#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_dtcm), okay)
 	(void)memset(&__dtcm_bss_start, 0,
 		     ((u32_t) &__dtcm_bss_end - (u32_t) &__dtcm_bss_start));
 #endif
@@ -146,11 +147,11 @@ void z_data_copy(void)
 	(void)memcpy(&_ramfunc_ram_start, &_ramfunc_rom_start,
 		 (uintptr_t) &_ramfunc_ram_size);
 #endif /* CONFIG_ARCH_HAS_RAMFUNC_SUPPORT */
-#if DT_HAS_NODE_STATUS_OKAY(DT_CHOSEN(zephyr_ccm))
+#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_ccm), okay)
 	(void)memcpy(&__ccm_data_start, &__ccm_data_rom_start,
 		 __ccm_data_end - __ccm_data_start);
 #endif
-#if DT_HAS_NODE_STATUS_OKAY(DT_CHOSEN(zephyr_dtcm))
+#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_dtcm), okay)
 	(void)memcpy(&__dtcm_data_start, &__dtcm_data_rom_start,
 		 __dtcm_data_end - __dtcm_data_start);
 #endif
@@ -316,30 +317,8 @@ static void init_idle_thread(int i)
  * @return N/A
  */
 #ifdef CONFIG_MULTITHREADING
-static void prepare_multithreading(struct k_thread *dummy_thread)
+static void prepare_multithreading(void)
 {
-#ifdef CONFIG_ARCH_HAS_CUSTOM_SWAP_TO_MAIN
-	ARG_UNUSED(dummy_thread);
-#else
-
-	/*
-	 * Initialize the current execution thread to permit a level of
-	 * debugging output if an exception should happen during kernel
-	 * initialization.  However, don't waste effort initializing the
-	 * fields of the dummy thread beyond those needed to identify it as a
-	 * dummy thread.
-	 */
-	dummy_thread->base.user_options = K_ESSENTIAL;
-	dummy_thread->base.thread_state = _THREAD_DUMMY;
-#ifdef CONFIG_THREAD_STACK_INFO
-	dummy_thread->stack_info.start = 0U;
-	dummy_thread->stack_info.size = 0U;
-#endif
-#ifdef CONFIG_USERSPACE
-	dummy_thread->mem_domain_info.mem_domain = 0;
-#endif
-#endif /* CONFIG_ARCH_HAS_CUSTOM_SWAP_TO_MAIN */
-
 	/* _kernel.ready_q is all zeroes */
 	z_sched_init();
 
@@ -464,10 +443,6 @@ sys_rand_fallback:
  */
 FUNC_NORETURN void z_cstart(void)
 {
-#ifdef CONFIG_STACK_CANARIES
-	uintptr_t stack_guard;
-#endif	/* CONFIG_STACK_CANARIES */
-
 	/* gcov hook needed to get the coverage report.*/
 	gcov_static_init();
 
@@ -476,15 +451,13 @@ FUNC_NORETURN void z_cstart(void)
 	/* perform any architecture-specific initialization */
 	arch_kernel_init();
 
-#ifdef CONFIG_MULTITHREADING
-	struct k_thread dummy_thread = {
-		 .base.thread_state = _THREAD_DUMMY,
-# ifdef CONFIG_SCHED_CPU_MASK
-		 .base.cpu_mask = -1,
-# endif
-	};
+#if defined(CONFIG_MULTITHREADING)
+	/* Note: The z_ready_thread() call in prepare_multithreading() requires
+	 * a dummy thread even if CONFIG_ARCH_HAS_CUSTOM_SWAP_TO_MAIN=y
+	 */
+	struct k_thread dummy_thread;
 
-	_current_cpu->current = &dummy_thread;
+	z_dummy_thread_init(&dummy_thread);
 #endif
 
 	/* perform basic hardware initialization */
@@ -492,13 +465,15 @@ FUNC_NORETURN void z_cstart(void)
 	z_sys_init_run_level(_SYS_INIT_LEVEL_PRE_KERNEL_2);
 
 #ifdef CONFIG_STACK_CANARIES
+	uintptr_t stack_guard;
+
 	z_early_boot_rand_get((u8_t *)&stack_guard, sizeof(stack_guard));
 	__stack_chk_guard = stack_guard;
 	__stack_chk_guard <<= 8;
 #endif	/* CONFIG_STACK_CANARIES */
 
 #ifdef CONFIG_MULTITHREADING
-	prepare_multithreading(&dummy_thread);
+	prepare_multithreading();
 	switch_to_main_thread();
 #else
 	bg_thread_main(NULL, NULL, NULL);

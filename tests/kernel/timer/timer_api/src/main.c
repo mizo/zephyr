@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdlib.h>
 #include <ztest.h>
 #include <zephyr/types.h>
 
@@ -18,6 +19,14 @@ struct timer_data {
 #define EXPIRE_TIMES 4
 #define WITHIN_ERROR(var, target, epsilon)       \
 		(((var) >= (target)) && ((var) <= (target) + (epsilon)))
+/* ms can be converted precisely to ticks only when a ms is exactly
+ * represented by an integral number of ticks.  If the conversion is
+ * not precise, then the reverse conversion of a difference in ms can
+ * end up being off by a tick depending on the relative error between
+ * the first and second ms conversion, and we need to adjust the
+ * tolerance interval.
+ */
+#define INEXACT_MS_CONVERT ((CONFIG_SYS_CLOCK_TICKS_PER_SEC % MSEC_PER_SEC) != 0)
 
 static void duration_expire(struct k_timer *timer);
 static void duration_stop(struct k_timer *timer);
@@ -61,9 +70,13 @@ static void duration_expire(struct k_timer *timer)
 
 	tdata.expire_cnt++;
 	if (tdata.expire_cnt == 1) {
-		TIMER_ASSERT(interval >= DURATION, timer);
+		TIMER_ASSERT((interval >= DURATION)
+			     || (INEXACT_MS_CONVERT
+				 && (interval == DURATION - 1)), timer);
 	} else {
-		TIMER_ASSERT(interval >= PERIOD, timer);
+		TIMER_ASSERT((interval >= PERIOD)
+			     || (INEXACT_MS_CONVERT
+				 && (interval == PERIOD - 1)), timer);
 	}
 
 	if (tdata.expire_cnt >= EXPIRE_TIMES) {
@@ -234,6 +247,7 @@ static void tick_sync(void)
  */
 void test_timer_periodicity(void)
 {
+	u64_t period_ms = k_ticks_to_ms_floor64(k_ms_to_ticks_ceil32(PERIOD));
 	s64_t delta;
 
 	/* Start at a tick boundary, otherwise a tick expiring between
@@ -270,10 +284,14 @@ void test_timer_periodicity(void)
 		 * one requested, as the kernel uses the ticks to manage
 		 * time. The actual perioid will be equal to [tick time]
 		 * multiplied by k_ms_to_ticks_ceil32(PERIOD).
+		 *
+		 * In the case of inexact conversion the delta will
+		 * occasionally be one less than the expected number.
 		 */
-		TIMER_ASSERT(WITHIN_ERROR(delta,
-				k_ticks_to_ms_floor64(k_ms_to_ticks_ceil32(PERIOD)), 1),
-				&periodicity_timer);
+		TIMER_ASSERT(WITHIN_ERROR(delta, period_ms, 1)
+			     || (INEXACT_MS_CONVERT
+				 && (delta == period_ms - 1)),
+			     &periodicity_timer);
 	}
 
 	/* cleanup environment */
@@ -521,6 +539,7 @@ void test_timer_user_data(void)
 void test_timer_remaining(void)
 {
 	u32_t dur_ticks = k_ms_to_ticks_ceil32(DURATION);
+	u32_t target_rem_ticks = k_ms_to_ticks_ceil32(DURATION / 2) + 1;
 	u32_t rem_ms, rem_ticks, exp_ticks;
 	u64_t now;
 
@@ -544,7 +563,19 @@ void test_timer_remaining(void)
 	zassert_true(rem_ms <= (DURATION / 2) + k_ticks_to_ms_floor64(1),
 		     NULL);
 
-	zassert_true(rem_ticks <= dur_ticks / 2, NULL);
+	/* Half the value of DURATION in ticks may not be the value of
+	 * half DURATION in ticks, when DURATION/2 is not an integer
+	 * multiple of ticks, so target_rem_ticks is used rather than
+	 * dur_ticks/2.
+	 *
+	 * Also if the tick clock is faster or slower than the
+	 * busywait clock the remaining time in ticks will be larger
+	 * or smaller than expected, so relax the tolerance.  3 ticks
+	 * variance has been observed on hardware where the busywait
+	 * clock is 0.7% slow and the 32 KiHz tick clock is 60 ppm
+	 * fast relative to a stable external clock.
+	 */
+	zassert_true(abs((s32_t)(rem_ticks - target_rem_ticks)) <= 3, NULL);
 
 	/* Note +1 tick precision: even though we're calcluating in
 	 * ticks, we're waiting in k_busy_wait(), not for a timer
@@ -561,6 +592,9 @@ void test_timeout_abs(void)
 {
 #ifdef CONFIG_TIMEOUT_64BIT
 	const u64_t exp_ms = 10000000;
+	u64_t cap_ticks;
+	u64_t rem_ticks;
+	u64_t cap2_ticks;
 	u64_t exp_ticks = k_ms_to_ticks_ceil64(exp_ms);
 	k_timeout_t t = K_TIMEOUT_ABS_TICKS(exp_ticks), t2;
 
@@ -585,12 +619,21 @@ void test_timeout_abs(void)
 	 * convention (i.e. a timer of "1 tick" will expire at "now
 	 * plus 2 ticks", because "now plus one" will always be
 	 * somewhat less than a tick).
+	 *
+	 * However, if the timer clock runs relatively fast the tick
+	 * clock may advance before or after reading the remaining
+	 * ticks, so we have to check that at least one case is
+	 * satisfied.
 	 */
 	k_usleep(1); /* align to tick */
 	k_timer_start(&remain_timer, t, K_FOREVER);
-	zassert_true(k_timer_remaining_ticks(&remain_timer)
-		     + k_uptime_ticks() + 1 == exp_ticks, NULL);
+	cap_ticks = k_uptime_ticks();
+	rem_ticks = k_timer_remaining_ticks(&remain_timer);
+	cap2_ticks = k_uptime_ticks();
 	k_timer_stop(&remain_timer);
+	zassert_true((cap_ticks + rem_ticks + 1 == exp_ticks)
+		     || (rem_ticks + cap2_ticks + 1 == exp_ticks),
+		     NULL);
 #endif
 }
 

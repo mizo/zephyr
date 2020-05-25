@@ -42,6 +42,11 @@ try:
 except ImportError:
     print("Install tabulate python module with pip to use --device-testing option.")
 
+try:
+    import psutil
+except ImportError:
+    print("Install psutil python module with pip to run in Qemu.")
+
 ZEPHYR_BASE = os.getenv("ZEPHYR_BASE")
 if not ZEPHYR_BASE:
     sys.exit("$ZEPHYR_BASE environment variable undefined")
@@ -499,14 +504,19 @@ class DeviceHandler(Handler):
 
         log_out_fp.close()
 
-    def device_is_available(self, device):
+    def device_is_available(self, instance):
+        device = instance.platform.name
+        fixture = instance.testcase.harness_config.get("fixture")
         for i in self.suite.connected_hardware:
+            if fixture and fixture not in i.get('fixtures', []):
+                continue
             if i['platform'] == device and i['available'] and i['serial']:
                 return True
 
         return False
 
-    def get_available_device(self, device):
+    def get_available_device(self, instance):
+        device = instance.platform.name
         for i in self.suite.connected_hardware:
             if i['platform'] == device and i['available'] and i['serial']:
                 i['available'] = False
@@ -554,13 +564,14 @@ class DeviceHandler(Handler):
         else:
             command = [self.generator_cmd, "-C", self.build_dir, "flash"]
 
-        while not self.device_is_available(self.instance.platform.name):
+        while not self.device_is_available(self.instance):
             logger.debug("Waiting for device {} to become available".format(self.instance.platform.name))
             time.sleep(1)
 
-        hardware = self.get_available_device(self.instance.platform.name)
+        hardware = self.get_available_device(self.instance)
 
-        runner = hardware.get('runner', None)
+        if hardware:
+            runner = hardware.get('runner', None)
         if runner:
             board_id = hardware.get("probe_id", hardware.get("id", None))
             product = hardware.get("product", None)
@@ -709,6 +720,18 @@ class QEMUHandler(Handler):
         self.pid_fn = os.path.join(instance.build_dir, "qemu.pid")
 
     @staticmethod
+    def _get_cpu_time(pid):
+        """get process CPU time.
+
+        The guest virtual time in QEMU icount mode isn't host time and
+        it's maintained by counting guest instructions, so we use QEMU
+        process exection time to mostly simulate the time of guest OS.
+        """
+        proc = psutil.Process(pid)
+        cpu_time = proc.cpu_times()
+        return cpu_time.user + cpu_time.system
+
+    @staticmethod
     def _thread(handler, timeout, outdir, logfile, fifo_fn, pid_fn, results, harness):
         fifo_in = fifo_fn + ".in"
         fifo_out = fifo_fn + ".out"
@@ -737,12 +760,29 @@ class QEMUHandler(Handler):
 
         line = ""
         timeout_extended = False
+
+        pid = 0
+        if os.path.exists(pid_fn):
+            pid = int(open(pid_fn).read())
+
         while True:
             this_timeout = int((timeout_time - time.time()) * 1000)
             if this_timeout < 0 or not p.poll(this_timeout):
+                if pid and this_timeout > 0:
+                    #there is possibility we polled nothing because
+                    #of host not scheduled QEMU process enough CPU
+                    #time during p.poll(this_timeout)
+                    cpu_time = QEMUHandler._get_cpu_time(pid)
+                    if cpu_time < timeout and not out_state:
+                        timeout_time = time.time() + (timeout - cpu_time)
+                        continue
+
                 if not out_state:
                     out_state = "timeout"
                 break
+
+            if pid == 0 and os.path.exists(pid_fn):
+                pid = int(open(pid_fn).read())
 
             try:
                 c = in_fp.read(1).decode("utf-8")
@@ -800,10 +840,7 @@ class QEMUHandler(Handler):
         log_out_fp.close()
         out_fp.close()
         in_fp.close()
-        if os.path.exists(pid_fn):
-            pid = int(open(pid_fn).read())
-            os.unlink(pid_fn)
-
+        if pid:
             try:
                 if pid:
                     os.kill(pid, signal.SIGTERM)
@@ -848,8 +885,29 @@ class QEMUHandler(Handler):
 
         with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self.build_dir) as proc:
             logger.debug("Spawning QEMUHandler Thread for %s" % self.name)
-            proc.wait()
-            self.returncode = proc.returncode
+            try:
+                proc.wait(self.timeout)
+            except subprocess.TimeoutExpired:
+                #sometimes QEMU can't handle SIGTERM signal correctly
+                #in that case kill -9 QEMU process directly and leave
+                #sanitycheck judge testing result by console output
+                if os.path.exists(self.pid_fn):
+                    qemu_pid = int(open(self.pid_fn).read())
+                    try:
+                        os.kill(qemu_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    proc.wait()
+                    self.returncode = 0
+                else:
+                    proc.terminate()
+                    proc.kill()
+                    self.returncode = proc.returncode
+            else:
+                self.returncode = proc.returncode
+
+            if os.path.exists(self.pid_fn):
+                os.unlink(self.pid_fn)
 
         if self.returncode != 0:
             self.set_state("failed", 0)
@@ -1406,6 +1464,9 @@ Tests should reference the category and subsystem with a dot as a separator.
                 _matches = re.findall(
                     stc_regex,
                     main_c[suite_regex_match.end():suite_run_match.start()])
+                for match in _matches:
+                    if not match.decode().startswith("test_"):
+                        warnings = "Found a test that does not start with test_"
                 matches = [match.decode().replace("test_", "") for match in _matches]
                 return matches, warnings
 
@@ -1478,7 +1539,7 @@ class TestInstance(DisablePyTestCollectionMixin):
         return self.name < other.name
 
     # Global testsuite parameters
-    def check_build_or_run(self, build_only=False, enable_slow=False, device_testing=False, fixture=[]):
+    def check_build_or_run(self, build_only=False, enable_slow=False, device_testing=False, fixtures=[]):
 
         # right now we only support building on windows. running is still work
         # in progress.
@@ -1516,18 +1577,19 @@ class TestInstance(DisablePyTestCollectionMixin):
                 runnable = False
 
         # console harness allows us to run the test and capture data.
-        if self.testcase.harness == 'console':
+        if self.testcase.harness in [ 'console', 'ztest']:
 
             # if we have a fixture that is also being supplied on the
             # command-line, then we need to run the test, not just build it.
-            if "fixture" in self.testcase.harness_config:
-                fixture_cfg = self.testcase.harness_config['fixture']
-                if fixture_cfg in fixture:
+            fixture = self.testcase.harness_config.get('fixture')
+            if fixture:
+                if fixture in fixtures:
                     _build_only = False
                 else:
                     _build_only = True
             else:
                 _build_only = False
+
         elif self.testcase.harness:
             _build_only = True
         else:
@@ -2161,6 +2223,9 @@ class TestSuite(DisablePyTestCollectionMixin):
     RELEASE_DATA = os.path.join(ZEPHYR_BASE, "scripts", "sanity_chk",
                             "sanity_last_release.csv")
 
+    SAMPLE_FILENAME = 'sample.yaml'
+    TESTCASE_FILENAME = 'testcase.yaml'
+
     def __init__(self, board_root_list=[], testcase_roots=[], outdir=None):
 
         self.roots = testcase_roots
@@ -2176,7 +2241,7 @@ class TestSuite(DisablePyTestCollectionMixin):
         self.cleanup = False
         self.enable_slow = False
         self.device_testing = False
-        self.fixture = []
+        self.fixtures = []
         self.enable_coverage = False
         self.enable_lsan = False
         self.enable_asan = False
@@ -2433,10 +2498,10 @@ class TestSuite(DisablePyTestCollectionMixin):
 
             for dirpath, dirnames, filenames in os.walk(root, topdown=True):
                 logger.debug("scanning %s" % dirpath)
-                if 'sample.yaml' in filenames:
-                    filename = 'sample.yaml'
-                elif 'testcase.yaml' in filenames:
-                    filename = 'testcase.yaml'
+                if self.SAMPLE_FILENAME in filenames:
+                    filename = self.SAMPLE_FILENAME
+                elif self.TESTCASE_FILENAME in filenames:
+                    filename = self.TESTCASE_FILENAME
                 else:
                     continue
 
@@ -2522,7 +2587,7 @@ class TestSuite(DisablePyTestCollectionMixin):
                         self.build_only,
                         self.enable_slow,
                         self.device_testing,
-                        self.fixture
+                        self.fixtures
                     )
                     instance.create_overlay(platform, self.enable_asan, self.enable_coverage, self.coverage_platform)
                     instance_list.append(instance)
@@ -2583,8 +2648,16 @@ class TestSuite(DisablePyTestCollectionMixin):
                     self.build_only,
                     self.enable_slow,
                     self.device_testing,
-                    self.fixture
+                    self.fixtures
                 )
+
+                if device_testing_filter:
+                    for h in self.connected_hardware:
+                        if h['platform'] == plat.name:
+                            if tc.harness_config.get('fixture') in h.get('fixtures', []):
+                                instance.build_only = False
+                                instance.run = True
+
                 if not force_platform and plat.name in exclude_platform:
                     discards[instance] = "Platform is excluded on command line."
                     continue

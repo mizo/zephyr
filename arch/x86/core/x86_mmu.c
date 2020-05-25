@@ -817,6 +817,25 @@ static void add_mmu_region(struct x86_page_tables *ptables,
 	}
 }
 
+
+void z_x86_add_mmu_region(uintptr_t addr, size_t size, u64_t flags)
+{
+	struct mmu_region rgn = {
+		.address = addr,
+		.size = size,
+		.flags = flags,
+	};
+
+	add_mmu_region(&z_x86_kernel_ptables, &rgn, false);
+#ifdef CONFIG_X86_KPTI
+	add_mmu_region(&z_x86_user_ptables, &rgn, true);
+#endif
+}
+
+void __weak z_x86_soc_add_mmu_regions(void)
+{
+}
+
 /* Called from x86's arch_kernel_init() */
 void z_x86_paging_init(void)
 {
@@ -828,6 +847,8 @@ void z_x86_paging_init(void)
 		add_mmu_region(&z_x86_user_ptables, rgn, true);
 #endif
 	}
+
+	z_x86_soc_add_mmu_regions();
 
 	pages_free = (page_pos - page_pool) / MMU_PAGE_SIZE;
 
@@ -1073,8 +1094,8 @@ static void apply_mem_partition(struct x86_page_tables *ptables,
 	}
 
 	__ASSERT(partition->start >= PHYS_RAM_ADDR,
-		 "region at %08lx[%zu] extends below system ram start 0x%08x",
-		 partition->start, partition->size, PHYS_RAM_ADDR);
+		 "region at %08lx[%zu] extends below system ram start 0x%08lx",
+		 partition->start, partition->size, (uintptr_t)PHYS_RAM_ADDR);
 	__ASSERT(((partition->start + partition->size) <=
 		  (PHYS_RAM_ADDR + PHYS_RAM_SIZE)),
 		 "region at %08lx[%zu] end at %08lx extends beyond system ram end 0x%08lx",
