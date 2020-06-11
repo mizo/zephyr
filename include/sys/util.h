@@ -48,29 +48,31 @@ extern "C" {
 /* Evaluates to 0 if cond is true-ish; compile error otherwise */
 #define ZERO_OR_COMPILE_ERROR(cond) ((int) sizeof(char[1 - 2 * !(cond)]) - 1)
 
-/* Evaluates to 0 if array is an array; compile error if not array (e.g.
- * pointer)
+#if defined(__cplusplus)
+
+/* Evaluates to number of elements in an array.  Due to language
+ * limitations this will accept (though perhaps not do something
+ * meaningful) when array is a type that implements operator[].
+ */
+#define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
+
+#else /* __cplusplus */
+
+/* Evaluates to 0 if array is an array; compile error if not array
+ * (e.g.  pointer).  The built-in function used for type checking is
+ * not supported by GNU C++.
  */
 #define IS_ARRAY(array) \
 	ZERO_OR_COMPILE_ERROR( \
 		!__builtin_types_compatible_p(__typeof__(array), \
 					      __typeof__(&(array)[0])))
-
-#if defined(__cplusplus)
-extern "C++" {
-template < class T, size_t N >
-#if __cplusplus >= 201103L
-constexpr
-#endif /* >= C++11 */
-size_t ARRAY_SIZE(T(&)[N]) { return N; }
-}
-#else
 /* Evaluates to number of elements in an array; compile error if not
  * an array (e.g. pointer)
  */
 #define ARRAY_SIZE(array) \
 	((long) (IS_ARRAY(array) + (sizeof(array) / sizeof((array)[0]))))
-#endif
+
+#endif /* __cplusplus */
 
 /* Evaluates to 1 if ptr is part of array, 0 otherwise; compile error if
  * "array" argument is not an array (e.g. "ptr" and "array" mixed up)
@@ -118,9 +120,9 @@ static inline bool is_power_of_two(unsigned int x)
 	return (x != 0U) && ((x & (x - 1)) == 0U);
 }
 
-static inline s64_t arithmetic_shift_right(s64_t value, u8_t shift)
+static inline int64_t arithmetic_shift_right(int64_t value, uint8_t shift)
 {
-	s64_t sign_ext;
+	int64_t sign_ext;
 
 	if (shift == 0U) {
 		return value;
@@ -144,7 +146,7 @@ static inline s64_t arithmetic_shift_right(s64_t value, u8_t shift)
  *
  *  @return Zero on success or (negative) error code otherwise.
  */
-int char2hex(char c, u8_t *x);
+int char2hex(char c, uint8_t *x);
 
 /**
  * @brief      Convert a single hexadecimal nibble into a character.
@@ -154,7 +156,7 @@ int char2hex(char c, u8_t *x);
  *
  *  @return Zero on success or (negative) error code otherwise.
  */
-int hex2char(u8_t x, char *c);
+int hex2char(uint8_t x, char *c);
 
 /**
  * @brief      Convert a binary array into string representation.
@@ -166,7 +168,7 @@ int hex2char(u8_t x, char *c);
  *
  * @return     The length of the converted string, or 0 if an error occurred.
  */
-size_t bin2hex(const u8_t *buf, size_t buflen, char *hex, size_t hexlen);
+size_t bin2hex(const uint8_t *buf, size_t buflen, char *hex, size_t hexlen);
 
 /*
  * Convert hex string to byte string
@@ -184,12 +186,12 @@ size_t bin2hex(const u8_t *buf, size_t buflen, char *hex, size_t hexlen);
  *
  * @return     The length of the binary array , or 0 if an error occurred.
  */
-size_t hex2bin(const char *hex, size_t hexlen, u8_t *buf, size_t buflen);
+size_t hex2bin(const char *hex, size_t hexlen, uint8_t *buf, size_t buflen);
 
 /**
- * @brief      Convert a u8_t into decimal string representation.
+ * @brief      Convert a uint8_t into decimal string representation.
  *
- * Convert a u8_t value into ASCII decimal string representation.
+ * Convert a uint8_t value into ASCII decimal string representation.
  * The string is terminated if there is enough space in buf.
  *
  * @param[out] buf     Address of where to store the string representation.
@@ -199,7 +201,7 @@ size_t hex2bin(const char *hex, size_t hexlen, u8_t *buf, size_t buflen);
  * @return     The length of the converted string (excluding terminator if
  *             any), or 0 if an error occurred.
  */
-u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
+uint8_t u8_to_dec(char *buf, uint8_t buflen, uint8_t value);
 
 #endif /* !_ASMLANGUAGE */
 
@@ -297,12 +299,12 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  *
  * Usage example:
  *
- * \#define MACRO(x) COND_CODE_1(CONFIG_FLAG, (u32_t x;), ())
+ * \#define MACRO(x) COND_CODE_1(CONFIG_FLAG, (uint32_t x;), ())
  *
  * It can be considered as alternative to:
  *
  * \#if defined(CONFIG_FLAG) && (CONFIG_FLAG == 1)
- * \#define MACRO(x) u32_t x;
+ * \#define MACRO(x) uint32_t x;
  * \#else
  * \#define MACRO(x)
  * \#endif
@@ -331,12 +333,12 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  *
  * Usage example:
  *
- * IF_ENABLED(CONFIG_FLAG, (u32_t foo;))
+ * IF_ENABLED(CONFIG_FLAG, (uint32_t foo;))
  *
  * It can be considered as more compact alternative to:
  *
  * \#if defined(CONFIG_FLAG) && (CONFIG_FLAG == 1)
- *	u32_t foo;
+ *	uint32_t foo;
  * \#endif
  *
  * @param _flag		Evaluated flag
@@ -408,7 +410,7 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  * @param ... 		list to be processed
  */
 #define LIST_DROP_EMPTY(...) \
-	Z_LIST_DROP_FIRST(FOR_EACH(Z_LIST_NO_EMPTIES, __VA_ARGS__))
+	Z_LIST_DROP_FIRST(FOR_EACH(Z_LIST_NO_EMPTIES, (), __VA_ARGS__))
 
 /* Adding ',' after each element would add empty element at the end of
  * list, which is hard to remove, so instead precede each element with ',',
@@ -959,16 +961,16 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
 #define UTIL_LISTIFY(LEN, F, ...) UTIL_EVAL(UTIL_REPEAT(LEN, F, __VA_ARGS__))
 
 /* Set of internal macros used for FOR_EACH series of macros. */
-#define Z_FOR_EACH_IDX(count, n, macro, semicolon, fixed_arg0, fixed_arg1, ...)\
+#define Z_FOR_EACH_IDX(count, n, macro, sep, fixed_arg0, fixed_arg1, ...)\
 	UTIL_WHEN(count)						\
 	(								\
 		UTIL_OBSTRUCT(macro)					\
 		(							\
 			fixed_arg0, fixed_arg1, n, GET_ARG1(__VA_ARGS__)\
-		)semicolon						\
+		) COND_CODE_1(count, (), (__DEBRACKET sep))		\
 		UTIL_OBSTRUCT(Z_FOR_EACH_IDX_INDIRECT) ()		\
 		(							\
-			UTIL_DEC(count), UTIL_INC(n), macro, semicolon, \
+			UTIL_DEC(count), UTIL_INC(n), macro, sep,	\
 			fixed_arg0, fixed_arg1,				\
 			GET_ARGS_LESS_1(__VA_ARGS__)			\
 		)							\
@@ -992,10 +994,13 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  * @brief Calls macro F for each provided argument with index as first argument
  *	  and nth parameter as the second argument.
  *
+ * @note Separator argument must be in parentheses. It is required to enable
+ *	 providing comma as separator.
+ *
  * Example:
  *
- *     #define F(idx, x) int a##idx = x;
- *     FOR_EACH_IDX(F, 4, 5, 6)
+ *     #define F(idx, x) int a##idx = x
+ *     FOR_EACH_IDX(F, (;), 4, 5, 6);
  *
  * will result in following code:
  *
@@ -1005,11 +1010,12 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  *
  * @param F Macro takes index and first argument and nth variable argument as
  *	    the second one.
+ * @param sep Separator (e.g. comma or semicolon). Must be in parentheses.
  * @param ... Variable list of argument. For each argument macro F is executed.
  */
-#define FOR_EACH_IDX(F, ...) \
+#define FOR_EACH_IDX(F, sep, ...) \
 	Z_FOR_EACH_IDX2(NUM_VA_ARGS_LESS_1(__VA_ARGS__, _), \
-			0, Z_FOR_EACH_SWALLOW_FIXED_ARG, /*no ;*/, \
+			0, Z_FOR_EACH_SWALLOW_FIXED_ARG, sep, \
 			F, 0, __VA_ARGS__)
 
 /**
@@ -1017,10 +1023,12 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  *	  and nth parameter as the second argument and fixed argument as the
  *	  third one.
  *
+ * @note Separator argument must be in parentheses. It is required to enable
+ *	 providing comma as separator.
  * Example:
  *
- *     #define F(idx, x, fixed_arg) int fixed_arg##idx = x;
- *     FOR_EACH_IDX_FIXED_ARG(F, a, 4, 5, 6)
+ *     #define F(idx, x, fixed_arg) int fixed_arg##idx = x
+ *     FOR_EACH_IDX_FIXED_ARG(F, (;), a, 4, 5, 6);
  *
  * will result in following code:
  *
@@ -1030,21 +1038,24 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  *
  * @param F Macro takes index and first argument and nth variable argument as
  *	    the second one and fixed argumnet as the third.
+ * @param sep Separator (e.g. comma or semicolon). Must be in parentheses.
  * @param fixed_arg Fixed argument passed to F macro.
  * @param ... Variable list of argument. For each argument macro F is executed.
  */
-#define FOR_EACH_IDX_FIXED_ARG(F, fixed_arg, ...) \
+#define FOR_EACH_IDX_FIXED_ARG(F, sep, fixed_arg, ...) \
 	Z_FOR_EACH_IDX2(NUM_VA_ARGS_LESS_1(__VA_ARGS__, _), \
-			0, Z_FOR_EACH_SWALLOW_NOTHING, /*no ;*/, \
+			0, Z_FOR_EACH_SWALLOW_NOTHING, sep, \
 			F, fixed_arg, __VA_ARGS__)
 
 /**
  * @brief Calls macro F for each provided argument.
  *
+ * @note Separator argument must be in parentheses. It is required to enable
+ *	 providing comma as separator.
  * Example:
  *
- *     #define F(x) int a##x;
- *     FOR_EACH(F, 4, 5, 6)
+ *     #define F(x) int a##x
+ *     FOR_EACH(F, (;), 4, 5, 6);
  *
  * will result in following code:
  *
@@ -1053,23 +1064,25 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  *     int a6;
  *
  * @param F Macro takes nth variable argument as the argument.
+ * @param sep Separator (e.g. comma or semicolon). Must be in parentheses.
  * @param ... Variable list of argument. For each argument macro F is executed.
  */
-#define FOR_EACH(F, ...) \
+#define FOR_EACH(F, sep, ...) \
 	Z_FOR_EACH_IDX2(NUM_VA_ARGS_LESS_1(__VA_ARGS__, _), \
-			0, Z_FOR_EACH_SWALLOW_INDEX_FIXED_ARG, /*no ;*/, \
+			0, Z_FOR_EACH_SWALLOW_INDEX_FIXED_ARG, sep, \
 			F, 0, __VA_ARGS__)
 
 /**
  * @brief Calls macro F for each provided argument with additional fixed
  *	  argument.
  *
- * After each iteration semicolon is added.
+ * @note Separator argument must be in parentheses. It is required to enable
+ *	 providing comma as separator.
  *
  * Example:
  *
  *     static void func(int val, void *dev);
- *     FOR_EACH_FIXED_ARG(func, dev, 4, 5, 6)
+ *     FOR_EACH_FIXED_ARG(func, (;), dev, 4, 5, 6);
  *
  * will result in following code:
  *
@@ -1079,12 +1092,13 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  *
  * @param F Macro takes nth variable argument as the first parameter and
  *	     fixed argument as the second parameter.
+ * @param sep Separator (e.g. comma or semicolon). Must be in parentheses.
  * @param fixed_arg Fixed argument forward to macro execution for each argument.
  * @param ... Variable list of argument. For each argument macro F is executed.
  */
-#define FOR_EACH_FIXED_ARG(F, fixed_arg, ...) \
+#define FOR_EACH_FIXED_ARG(F, sep, fixed_arg, ...) \
 	Z_FOR_EACH_IDX2(NUM_VA_ARGS_LESS_1(__VA_ARGS__, _), \
-			0, Z_FOR_EACH_SWALLOW_INDEX, ;, \
+			0, Z_FOR_EACH_SWALLOW_INDEX, sep, \
 			F, fixed_arg, __VA_ARGS__)
 
 /**@brief Implementation details for NUM_VAR_ARGS */
@@ -1120,13 +1134,13 @@ u8_t u8_to_dec(char *buf, u8_t buflen, u8_t value);
  *
  * @deprecated Use FOR_EACH instead.
  *
- * @param ... Macro name to be used for argument processing followed by
- *            arguments to process. Macro should have following
- *            form: MACRO(argument).
+ * @param F   Macro name to be used for argument processing Macro should have
+ *	      following form: MACRO(argument).
+ * @param ... Arguments to process.
  *
  * @return All arguments processed by given macro
  */
-#define MACRO_MAP(...) __DEPRECATED_MACRO FOR_EACH(__VA_ARGS__)
+#define MACRO_MAP(F, ...) __DEPRECATED_MACRO FOR_EACH(F, (), __VA_ARGS__)
 
 /**
  * @brief Mapping macro that pastes results together

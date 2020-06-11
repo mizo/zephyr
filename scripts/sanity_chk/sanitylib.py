@@ -1624,6 +1624,7 @@ class TestInstance(DisablePyTestCollectionMixin):
                     content = content + "\nCONFIG_ASAN=y"
 
             f.write(content)
+            return content
 
     def calculate_sizes(self):
         """Get the RAM/ROM sizes of a test case.
@@ -1976,6 +1977,8 @@ class ProjectBuilder(FilterBuilder):
                     logger.debug("filtering %s" % self.instance.name)
                     self.instance.status = "skipped"
                     self.instance.reason = "filter"
+                    for case in self.instance.testcase.cases:
+                        self.instance.results.update({case: 'SKIP'})
                     pipeline.put({"op": "report", "test": self.instance})
                 else:
                     pipeline.put({"op": "build", "test": self.instance})
@@ -3032,7 +3035,7 @@ class TestSuite(DisablePyTestCollectionMixin):
                             eleTestcase,
                             'skipped',
                             type="skipped",
-                            message="Skipped")
+                            message=instance.reason)
             else:
                 eleTestcase = ET.SubElement(eleTestsuite, 'testcase',
                     classname="%s:%s" % (instance.platform.name, instance.testcase.name),

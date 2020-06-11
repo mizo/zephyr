@@ -15,7 +15,7 @@ This kit provides:
 
         - Embedded ultra-low-power STM32L072CZ Series MCUs, based on
           Arm* Cortex* -M0+ core, with 192 Kbytes of Flash
-          memory, 20 Kbytes of RAM, 20 Kbytes of EEPROM
+          memory, 20 Kbytes of RAM, 6 Kbytes of EEPROM
         - Frequency range: 860 MHz - 930 MHz
         - USB 2.0 FS
         - 4-channel,12-bit ADC, 2xDAC
@@ -134,6 +134,10 @@ The Zephyr B-L072Z-LRWAN1 Discovery board configuration supports the following h
 | GPIO      | on-chip    | gpio                                |
 +-----------+------------+-------------------------------------+
 | RTC       | on-chip    | counter                             |
++-----------+------------+-------------------------------------+
+| TRNG      | on-chip    | true random number generator        |
++-----------+------------+-------------------------------------+
+| EEPROM    | on-chip    | eeprom                              |
 +-----------+------------+-------------------------------------+
 
 Other hardware features are not yet supported on this Zephyr port.

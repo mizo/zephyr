@@ -573,3 +573,43 @@ and these tests will be executed on the boards that provide this fixture.
 
 .. figure:: fixtures.svg
    :figclass: align-center
+
+Notes
++++++
+
+It may be useful to annotate board descriptions in the hardware map file
+with additional information.  Use the "notes" keyword to do this.  For
+example::
+
+    - available: true
+      connected: false
+      fixtures:
+        - gpio_loopback
+      id: 000683290670
+      notes: An nrf5340pdk_nrf5340 is detected as an nrf52840dk_nrf52840 with no serial
+        port, and three serial ports with an unknown platform.  The board id of the serial
+        ports is not the same as the board id of the the development kit.  If you regenerate
+        this file you will need to update serial to reference the third port, and platform
+        to nrf5340pdk_nrf5340_cpuapp or another supported board target.
+      platform: nrf52840dk_nrf52840
+      product: J-Link
+      runner: jlink
+      serial: null
+
+Overriding Board Identifier
++++++++++++++++++++++++++++
+
+When (re-)generated the hardware map file will contain an "id" keyword
+that serves as the argument to ``--board-id`` when flashing.  In some
+cases the detected ID is not the correct one to use, for example when
+using an external J-Link probe.  The "probe_id" keyword overrides the
+"id" keyword for this purpose.   For example::
+
+    - available: true
+      connected: false
+      id: 0229000005d9ebc600000000000000000000000097969905
+      platform: mimxrt1060_evk
+      probe_id: 000609301751
+      product: DAPLink CMSIS-DAP
+      runner: jlink
+      serial: null
