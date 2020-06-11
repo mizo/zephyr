@@ -449,9 +449,9 @@ static inline uint32_t hal_radio_phy_mode_get(uint8_t phy, uint8_t flags)
 				0x5C;
 
 		/* Workaround: nRF52840 Rev 1 Errata ID 191 */
-		*(volatile u32_t *)0x40001740 =
-				((*(volatile u32_t *)0x40001740) & 0x7FFF00FF) |
-				0x80000000 | ((u32_t)196 << 8);
+		*(volatile uint32_t *)0x40001740 =
+				((*(volatile uint32_t *)0x40001740) & 0x7FFF00FF) |
+				0x80000000 | ((uint32_t)196 << 8);
 		break;
 #endif /* CONFIG_BT_CTLR_PHY_CODED */
 	}

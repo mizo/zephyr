@@ -10,8 +10,8 @@
 #include <version.h>
 
 struct version {
-	const u8_t *build_version;
-	const u8_t *kernel_version;
+	const uint8_t *build_version;
+	const uint8_t *kernel_version;
 };
 
 Z_GENERIC_SECTION(.version) struct version _version = {
