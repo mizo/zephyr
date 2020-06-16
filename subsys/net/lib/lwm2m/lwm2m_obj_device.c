@@ -62,6 +62,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define DEVICE_PWRSRC_MAX	5
 #endif
 
+#ifdef CONFIG_LWM2M_DEVICE_EXT_DEV_INFO_MAX
+#define DEVICE_EXT_DEV_INFO_MAX CONFIG_LWM2M_DEVICE_EXT_DEV_INFO_MAX
+#else
+#define DEVICE_EXT_DEV_INFO_MAX	1
+#endif
+
 #define DEVICE_STRING_SHORT	8
 
 #define DEVICE_SERVICE_INTERVAL_MS (MSEC_PER_SEC * 10)
@@ -70,12 +76,14 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
  * Calculate resource instances as follows:
  * start with DEVICE_MAX_ID
  * subtract EXEC resources (3)
- * subtract MULTI resources because their counts include 0 resource (4)
+ * subtract MULTI resources because their counts include 0 resource (5)
  * add 3x DEVICE_PWRSRC_MAX for POWER SOURCES resource instances
  * add DEVICE_ERROR_CODE_MAX for ERROR CODE resource instances
+ * add DEVICE_EXT_DEV_INFO_MAX for EXT DEV INFO  resource instances
  */
-#define RESOURCE_INSTANCE_COUNT	(DEVICE_MAX_ID - 3 - 4 + \
-				DEVICE_PWRSRC_MAX*3 + DEVICE_ERROR_CODE_MAX)
+#define RESOURCE_INSTANCE_COUNT	(DEVICE_MAX_ID - 3 - 5 + \
+				 DEVICE_PWRSRC_MAX*3 + DEVICE_ERROR_CODE_MAX + \
+				 DEVICE_EXT_DEV_INFO_MAX)
 
 /* resource state variables */
 static uint8_t  error_code_list[DEVICE_ERROR_CODE_MAX];
@@ -108,7 +116,7 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(DEVICE_SOFTWARE_VERSION_ID, R_OPT, STRING),
 	OBJ_FIELD_DATA(DEVICE_BATTERY_STATUS_ID, R_OPT, U8),
 	OBJ_FIELD_DATA(DEVICE_MEMORY_TOTAL_ID, R_OPT, S32),
-	OBJ_FIELD_DATA(DEVICE_EXT_DEV_INFO_ID, R_OPT, S32)
+	OBJ_FIELD_DATA(DEVICE_EXT_DEV_INFO_ID, R_OPT, OBJLNK)
 };
 
 static struct lwm2m_engine_obj_inst inst;
@@ -161,113 +169,6 @@ static int current_time_post_write_cb(uint16_t obj_inst_id, uint16_t res_id,
 
 	LOG_ERR("unknown size %u", data_len);
 	return -EINVAL;
-}
-
-/* special setter functions */
-
-__deprecated int lwm2m_device_add_pwrsrc(uint8_t pwrsrc_type)
-{
-	int i;
-	struct lwm2m_engine_res *res;
-
-	if (pwrsrc_type >= LWM2M_DEVICE_PWR_SRC_TYPE_MAX) {
-		LOG_ERR("power source id %d is invalid", pwrsrc_type);
-		return -EINVAL;
-	}
-
-	i = lwm2m_engine_get_resource("3/0/6", &res);
-	if (i < 0 || !res || !res->res_instances) {
-		return -ENOENT;
-	}
-
-	for (i = 0; i < res->res_inst_count; i++) {
-		if (res->res_instances[i].res_inst_id ==
-				RES_INSTANCE_NOT_CREATED &&
-		    res->res_instances[i].data_ptr != NULL) {
-			break;
-		}
-	}
-
-	if (i >= res->res_inst_count) {
-		return -ENOMEM;
-	}
-
-	*(uint8_t *)res->res_instances[i].data_ptr = pwrsrc_type;
-	res->res_instances[i].res_inst_id = i;
-	NOTIFY_OBSERVER(LWM2M_OBJECT_DEVICE_ID, 0,
-			DEVICE_AVAILABLE_POWER_SOURCES_ID);
-
-	return 0;
-}
-
-/*
- * TODO: this will disable the index, but current printing function expects
- * all indexes to be in order up to pwrsrc_count
- */
-__deprecated int lwm2m_device_remove_pwrsrc(int index)
-{
-	int ret;
-	struct lwm2m_engine_res *res;
-
-	ret = lwm2m_engine_get_resource("3/0/6", &res);
-	if (ret < 0 || !res || !res->res_instances) {
-		return -ENOENT;
-	}
-
-	if (index >= res->res_inst_count) {
-		LOG_ERR("index %d is invalid", index);
-		return -EINVAL;
-	}
-
-	if (res->res_instances[index].res_inst_id ==
-			RES_INSTANCE_NOT_CREATED ||
-	    !res->res_instances[index].data_ptr) {
-		return -ENOMEM;
-	}
-
-	*(uint8_t *)res->res_instances[index].data_ptr = 0;
-	res->res_instances[index].res_inst_id = RES_INSTANCE_NOT_CREATED;
-	NOTIFY_OBSERVER(LWM2M_OBJECT_DEVICE_ID, 0,
-			DEVICE_AVAILABLE_POWER_SOURCES_ID);
-
-	return 0;
-}
-
-static int device_set_pwrsrc_value(char *pathstr, int index, int32_t value)
-{
-	int ret;
-	struct lwm2m_engine_res *res;
-
-	ret = lwm2m_engine_get_resource(pathstr, &res);
-	if (ret < 0 || !res || !res->res_instances) {
-		return -ENOENT;
-	}
-
-	if (index >= res->res_inst_count) {
-		LOG_ERR("index %d is invalid", index);
-		return -EINVAL;
-	}
-
-	if (res->res_instances[index].res_inst_id ==
-			RES_INSTANCE_NOT_CREATED ||
-	    !res->res_instances[index].data_ptr) {
-		return -ENOMEM;
-	}
-
-	*(int32_t *)res->res_instances[index].data_ptr = value;
-	NOTIFY_OBSERVER(LWM2M_OBJECT_DEVICE_ID, 0, res->res_id);
-
-	return 0;
-}
-
-__deprecated int lwm2m_device_set_pwrsrc_voltage_mv(int index, int voltage_mv)
-{
-	return device_set_pwrsrc_value("3/0/7", index, voltage_mv);
-}
-
-__deprecated int lwm2m_device_set_pwrsrc_current_ma(int index, int current_ma)
-{
-	return device_set_pwrsrc_value("3/0/8", index, current_ma);
 }
 
 /* error code function */
@@ -338,6 +239,8 @@ static struct lwm2m_engine_obj_inst *device_create(uint16_t obj_inst_id)
 	INIT_OBJ_RES_OPTDATA(DEVICE_SOFTWARE_VERSION_ID, res, i, res_inst, j);
 	INIT_OBJ_RES_OPTDATA(DEVICE_BATTERY_STATUS_ID, res, i, res_inst, j);
 	INIT_OBJ_RES_OPTDATA(DEVICE_MEMORY_TOTAL_ID, res, i, res_inst, j);
+	INIT_OBJ_RES_MULTI_OPTDATA(DEVICE_EXT_DEV_INFO_ID, res, i, res_inst, j,
+				   DEVICE_EXT_DEV_INFO_MAX, false);
 
 	inst.resources = res;
 	inst.resource_count = i;

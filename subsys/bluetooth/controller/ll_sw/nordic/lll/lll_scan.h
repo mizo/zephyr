@@ -24,6 +24,7 @@ struct lll_scan {
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 	uint8_t  phy:3;
+	uint8_t  is_adv_ind:1;
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
@@ -43,9 +44,19 @@ struct lll_scan {
 #endif /* CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL */
 };
 
+struct lll_scan_aux {
+	struct lll_hdr hdr;
+
+	uint8_t chan:6;
+
+	uint8_t phy:3;
+
+	uint32_t window_size_us;
+};
+
 int lll_scan_init(void);
 int lll_scan_reset(void);
 
 void lll_scan_prepare(void *param);
 
-extern uint16_t ull_scan_lll_handle_get(struct lll_scan *lll);
+extern uint8_t ull_scan_lll_handle_get(struct lll_scan *lll);

@@ -87,8 +87,7 @@ void lll_slave_prepare(void *param)
 	}
 
 	/* Invoke common pipeline handling of prepare */
-	err = lll_prepare(lll_conn_is_abort_cb, lll_conn_abort_cb, prepare_cb,
-			  0, p);
+	err = lll_prepare(lll_is_abort_cb, lll_conn_abort_cb, prepare_cb, 0, p);
 	LL_ASSERT(!err || err == -EINPROGRESS);
 }
 
@@ -199,8 +198,9 @@ static int prepare_cb(struct lll_prepare_param *prepare_param)
 	radio_tmr_aa_capture();
 	radio_tmr_aa_save(0);
 
-	hcto = remainder_us + EVENT_JITTER_US + (EVENT_JITTER_US << 2) +
-	       (lll->slave.window_widening_event_us << 1) +
+	hcto = remainder_us +
+	       ((EVENT_JITTER_US + EVENT_TICKER_RES_MARGIN_US +
+		 lll->slave.window_widening_event_us) << 1) +
 	       lll->slave.window_size_event_us;
 
 #if defined(CONFIG_BT_CTLR_PHY)
@@ -243,7 +243,7 @@ static int prepare_cb(struct lll_prepare_param *prepare_param)
 	/* check if preempt to start has changed */
 	if (lll_preempt_calc(evt, (TICKER_ID_CONN_BASE + lll->handle),
 			     ticks_at_event)) {
-		radio_isr_set(lll_conn_isr_abort, lll);
+		radio_isr_set(lll_isr_abort, lll);
 		radio_disable();
 	} else
 #endif /* CONFIG_BT_CTLR_XTAL_ADVANCED */

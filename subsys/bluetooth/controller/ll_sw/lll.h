@@ -25,11 +25,17 @@
 #define XON_BITMASK BIT(31) /* XTAL has been retained from previous prepare */
 #endif /* CONFIG_BT_CTLR_XTAL_ADVANCED */
 
-#if defined(CONFIG_BT_BROADCASTER) && defined(CONFIG_BT_ADV_SET)
-#define BT_CTLR_ADV_MAX (CONFIG_BT_ADV_SET + 1)
-#else
-#define BT_CTLR_ADV_MAX 1
-#endif
+#if defined(CONFIG_BT_OBSERVER)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+#if defined(CONFIG_BT_CTLR_PHY_CODED)
+#define BT_CTLR_SCAN_SET 2
+#else /* !CONFIG_BT_CTLR_PHY_CODED */
+#define BT_CTLR_SCAN_SET 1
+#endif /* !CONFIG_BT_CTLR_PHY_CODED */
+#else /* !CONFIG_BT_CTLR_ADV_EXT */
+#define BT_CTLR_SCAN_SET 1
+#endif /* !CONFIG_BT_CTLR_ADV_EXT */
+#endif /* CONFIG_BT_OBSERVER */
 
 enum {
 	TICKER_ID_LLL_PREEMPT = 0,
@@ -38,14 +44,32 @@ enum {
 	TICKER_ID_ADV_STOP,
 	TICKER_ID_ADV_BASE,
 #if defined(CONFIG_BT_CTLR_ADV_EXT) || defined(CONFIG_BT_HCI_MESH_EXT)
-	TICKER_ID_ADV_LAST = ((TICKER_ID_ADV_BASE) + (BT_CTLR_ADV_MAX) - 1),
+	TICKER_ID_ADV_LAST = ((TICKER_ID_ADV_BASE) +
+			      (CONFIG_BT_CTLR_ADV_SET) - 1),
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+#if (CONFIG_BT_CTLR_ADV_AUX_SET > 0)
+	TICKER_ID_ADV_AUX_BASE,
+	TICKER_ID_ADV_AUX_LAST = ((TICKER_ID_ADV_AUX_BASE) +
+				  (CONFIG_BT_CTLR_ADV_AUX_SET) - 1),
+#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
+	TICKER_ID_ADV_SYNC_BASE,
+	TICKER_ID_ADV_SYNC_LAST = ((TICKER_ID_ADV_SYNC_BASE) +
+				   (CONFIG_BT_CTLR_ADV_SYNC_SET) - 1),
+#endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
+#endif /* CONFIG_BT_CTLR_ADV_AUX_SET > 0 */
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* !CONFIG_BT_CTLR_ADV_EXT || !CONFIG_BT_HCI_MESH_EXT */
 #endif /* CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_OBSERVER)
 	TICKER_ID_SCAN_STOP,
 	TICKER_ID_SCAN_BASE,
-	TICKER_ID_SCAN_LAST = TICKER_ID_SCAN_BASE,
+	TICKER_ID_SCAN_LAST = ((TICKER_ID_SCAN_BASE) + (BT_CTLR_SCAN_SET) - 1),
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	TICKER_ID_SCAN_AUX_BASE,
+	TICKER_ID_SCAN_AUX_LAST = ((TICKER_ID_SCAN_AUX_BASE) +
+				   (CONFIG_BT_CTLR_SCAN_AUX_SET) - 1),
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* CONFIG_BT_OBSERVER */
 
 #if defined(CONFIG_BT_CONN)
@@ -135,54 +159,55 @@ enum node_rx_type {
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 	NODE_RX_TYPE_EXT_1M_REPORT = 0x05,
-	NODE_RX_TYPE_EXT_CODED_REPORT = 0x06,
+	NODE_RX_TYPE_EXT_2M_REPORT = 0x06,
+	NODE_RX_TYPE_EXT_CODED_REPORT = 0x07,
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 
 #if defined(CONFIG_BT_CTLR_SCAN_REQ_NOTIFY)
-	NODE_RX_TYPE_SCAN_REQ = 0x07,
+	NODE_RX_TYPE_SCAN_REQ = 0x08,
 #endif /* CONFIG_BT_CTLR_SCAN_REQ_NOTIFY */
 
 #if defined(CONFIG_BT_CONN)
-	NODE_RX_TYPE_CONNECTION = 0x08,
-	NODE_RX_TYPE_TERMINATE = 0x09,
-	NODE_RX_TYPE_CONN_UPDATE = 0x0A,
-	NODE_RX_TYPE_ENC_REFRESH = 0x0B,
+	NODE_RX_TYPE_CONNECTION = 0x09,
+	NODE_RX_TYPE_TERMINATE = 0x0a,
+	NODE_RX_TYPE_CONN_UPDATE = 0x0b,
+	NODE_RX_TYPE_ENC_REFRESH = 0x0c,
 
 #if defined(CONFIG_BT_CTLR_LE_PING)
-	NODE_RX_TYPE_APTO = 0x0C,
+	NODE_RX_TYPE_APTO = 0x0d,
 #endif /* CONFIG_BT_CTLR_LE_PING */
 
-	NODE_RX_TYPE_CHAN_SEL_ALGO = 0x0D,
+	NODE_RX_TYPE_CHAN_SEL_ALGO = 0x0e,
 
 #if defined(CONFIG_BT_CTLR_PHY)
-	NODE_RX_TYPE_PHY_UPDATE = 0x0E,
+	NODE_RX_TYPE_PHY_UPDATE = 0x0f,
 #endif /* CONFIG_BT_CTLR_PHY */
 
 #if defined(CONFIG_BT_CTLR_CONN_RSSI)
-	NODE_RX_TYPE_RSSI = 0x0F,
+	NODE_RX_TYPE_RSSI = 0x10,
 #endif /* CONFIG_BT_CTLR_CONN_RSSI */
 #endif /* CONFIG_BT_CONN */
 
 #if defined(CONFIG_BT_CTLR_PROFILE_ISR)
-	NODE_RX_TYPE_PROFILE = 0x10,
+	NODE_RX_TYPE_PROFILE = 0x11,
 #endif /* CONFIG_BT_CTLR_PROFILE_ISR */
 
 #if defined(CONFIG_BT_CTLR_ADV_INDICATION)
-	NODE_RX_TYPE_ADV_INDICATION = 0x11,
+	NODE_RX_TYPE_ADV_INDICATION = 0x12,
 #endif /* CONFIG_BT_CTLR_ADV_INDICATION */
 
 #if defined(CONFIG_BT_CTLR_SCAN_INDICATION)
-	NODE_RX_TYPE_SCAN_INDICATION = 0x12,
+	NODE_RX_TYPE_SCAN_INDICATION = 0x13,
 #endif /* CONFIG_BT_CTLR_SCAN_INDICATION */
 
 #if defined(CONFIG_BT_HCI_MESH_EXT)
-	NODE_RX_TYPE_MESH_ADV_CPLT = 0x13,
-	NODE_RX_TYPE_MESH_REPORT = 0x14,
+	NODE_RX_TYPE_MESH_ADV_CPLT = 0x14,
+	NODE_RX_TYPE_MESH_REPORT = 0x15,
 #endif /* CONFIG_BT_HCI_MESH_EXT */
 
 /* Following proprietary defines must be at end of enum range */
 #if defined(CONFIG_BT_CTLR_USER_EXT)
-	NODE_RX_TYPE_USER_START = 0x15,
+	NODE_RX_TYPE_USER_START = 0x16,
 	NODE_RX_TYPE_USER_END = NODE_RX_TYPE_USER_START +
 				CONFIG_BT_CTLR_USER_EVT_RANGE,
 #endif /* CONFIG_BT_CTLR_USER_EXT */
@@ -194,8 +219,7 @@ struct node_rx_ftr {
 	void  *param;
 	void  *extra;
 	uint32_t ticks_anchor;
-	uint32_t us_radio_end;
-	uint32_t us_radio_rdy;
+	uint32_t radio_end_us;
 	uint8_t  rssi;
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	uint8_t  lrpa_used:1;
@@ -238,6 +262,13 @@ struct node_rx_pdu {
 enum {
 	EVENT_DONE_EXTRA_TYPE_NONE,
 	EVENT_DONE_EXTRA_TYPE_CONN,
+
+#if defined(CONFIG_BT_OBSERVER)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	EVENT_DONE_EXTRA_TYPE_SCAN_AUX,
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
+#endif /* CONFIG_BT_OBSERVER */
+
 /* Following proprietary defines must be at end of enum range */
 #if defined(CONFIG_BT_CTLR_USER_EXT)
 	EVENT_DONE_EXTRA_TYPE_USER_START,
@@ -293,21 +324,13 @@ static inline int lll_stop(void *lll)
 	return ret;
 }
 
-static inline int lll_is_stop(void *lll)
-{
-	struct lll_hdr *hdr = lll;
-
-	return !!hdr->is_stop;
-}
-
 int lll_init(void);
 int lll_reset(void);
-int lll_prepare(lll_is_abort_cb_t is_abort_cb, lll_abort_cb_t abort_cb,
-		lll_prepare_cb_t prepare_cb, int prio,
-		struct lll_prepare_param *prepare_param);
 void lll_resume(void *param);
 void lll_disable(void *param);
 uint32_t lll_radio_is_idle(void);
+uint32_t lll_radio_tx_ready_delay_get(uint8_t phy, uint8_t flags);
+uint32_t lll_radio_rx_ready_delay_get(uint8_t phy, uint8_t flags);
 int8_t lll_radio_tx_pwr_min_get(void);
 int8_t lll_radio_tx_pwr_max_get(void);
 int8_t lll_radio_tx_pwr_floor(int8_t tx_pwr_lvl);

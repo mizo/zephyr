@@ -376,13 +376,6 @@ if(NOT EXISTS ${LINKER_SCRIPT})
   message(FATAL_ERROR "Could not find linker script: '${LINKER_SCRIPT}'. Corrupted configuration?")
 endif()
 
-# Custom section support in linker scripts requires that the application source
-# directory is in the preprocessor search path, in order to find the custom
-# linker script fragments.
-if(CONFIG_CUSTOM_RODATA_LD OR CONFIG_CUSTOM_RWDATA_LD OR CONFIG_CUSTOM_SECTIONS_LD)
-  zephyr_include_directories(${APPLICATION_SOURCE_DIR})
-endif()
-
 configure_file(version.h.in ${PROJECT_BINARY_DIR}/include/generated/version.h)
 
 # Error-out when the deprecated naming convention is found (until
@@ -1112,7 +1105,7 @@ set(post_build_byproducts "")
 list(APPEND
   post_build_commands
   COMMAND
-  cmake -E rename ${logical_target_for_zephyr_elf}.map ${KERNEL_MAP_NAME}
+  ${CMAKE_COMMAND} -E rename ${logical_target_for_zephyr_elf}.map ${KERNEL_MAP_NAME}
 )
 
 if(NOT CONFIG_BUILD_NO_GAP_FILL)

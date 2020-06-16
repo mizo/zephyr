@@ -29,6 +29,7 @@
 /* for accessing devicetree properties of the bus node */
 #define QSPI_NODE DT_BUS(DT_DRV_INST(0))
 #define QSPI_PROP_AT(prop, idx) DT_PROP_BY_IDX(QSPI_NODE, prop, idx)
+#define QSPI_PROP_LEN(prop) DT_PROP_LEN(QSPI_NODE, prop)
 
 LOG_MODULE_REGISTER(qspi_nor, CONFIG_FLASH_LOG_LEVEL);
 
@@ -381,8 +382,13 @@ static inline void qspi_fill_init_struct(nrfx_qspi_config_t *initstruct)
 	initstruct->pins.csn_pin = QSPI_PROP_AT(csn_pins, 0);
 	initstruct->pins.io0_pin = QSPI_PROP_AT(io_pins, 0);
 	initstruct->pins.io1_pin = QSPI_PROP_AT(io_pins, 1);
+#if QSPI_PROP_LEN(io_pins) > 2
 	initstruct->pins.io2_pin = QSPI_PROP_AT(io_pins, 2);
 	initstruct->pins.io3_pin = QSPI_PROP_AT(io_pins, 3);
+#else
+	initstruct->pins.io2_pin = NRF_QSPI_PIN_NOT_CONNECTED;
+	initstruct->pins.io3_pin = NRF_QSPI_PIN_NOT_CONNECTED;
+#endif
 
 	/* Configure Protocol interface */
 #if DT_INST_NODE_HAS_PROP(0, readoc_enum)
@@ -543,6 +549,66 @@ static int qspi_nor_read(struct device *dev, off_t addr, void *dest,
 	return rc;
 }
 
+/* addr aligned, sptr not null, slen less than 4 */
+static inline nrfx_err_t write_sub_word(struct device *dev, off_t addr,
+					const void *sptr, size_t slen)
+{
+	uint8_t __aligned(4) buf[4];
+	nrfx_err_t res;
+
+	/* read out the whole word so that unchanged data can be
+	 * written back
+	 */
+	res = nrfx_qspi_read(buf, sizeof(buf), addr);
+	qspi_wait_for_completion(dev, res);
+
+	if (res == NRFX_SUCCESS) {
+		memcpy(buf, sptr, slen);
+		res = nrfx_qspi_write(buf, sizeof(buf), addr);
+		qspi_wait_for_completion(dev, res);
+	}
+
+	return res;
+}
+
+BUILD_ASSERT((CONFIG_NORDIC_QSPI_NOR_STACK_WRITE_BUFFER_SIZE % 4) == 0,
+	     "NOR stack buffer must be multiple of 4 bytes");
+
+#define NVMC_WRITE_OK (CONFIG_NORDIC_QSPI_NOR_STACK_WRITE_BUFFER_SIZE > 0)
+
+/* If enabled write using a stack-allocated aligned SRAM buffer as
+ * required for DMA transfers by QSPI peripheral.
+ *
+ * If not enabled return the error the peripheral would have produced.
+ */
+static inline nrfx_err_t write_from_nvmc(struct device *dev, off_t addr,
+					 const void *sptr, size_t slen)
+{
+#if NVMC_WRITE_OK
+	uint8_t __aligned(4) buf[CONFIG_NORDIC_QSPI_NOR_STACK_WRITE_BUFFER_SIZE];
+	const uint8_t *sp = sptr;
+	nrfx_err_t res = NRFX_SUCCESS;
+
+	while ((slen > 0) && (res == NRFX_SUCCESS)) {
+		size_t len = MIN(slen, sizeof(buf));
+
+		memcpy(buf, sp, len);
+		res = nrfx_qspi_write(buf, sizeof(buf),
+				      addr);
+		qspi_wait_for_completion(dev, res);
+
+		if (res == NRFX_SUCCESS) {
+			slen -= len;
+			sp += len;
+			addr += len;
+		}
+	}
+#else /* NVMC_WRITE_OK */
+	nrfx_err_t res = NRFX_ERROR_INVALID_ADDR;
+#endif /* NVMC_WRITE_OK */
+	return res;
+}
+
 static int qspi_nor_write(struct device *dev, off_t addr, const void *src,
 			  size_t size)
 {
@@ -550,8 +616,9 @@ static int qspi_nor_write(struct device *dev, off_t addr, const void *src,
 		return -EINVAL;
 	}
 
-	/* write size must be non-zero multiple of 4 bytes */
-	if (((size % 4U) != 0) || (size == 0)) {
+	/* write size must be non-zero, less than 4, or a multiple of 4 */
+	if ((size == 0)
+	    || ((size > 4) && ((size % 4U) != 0))) {
 		return -EINVAL;
 	}
 	/* address must be 4-byte aligned */
@@ -575,11 +642,18 @@ static int qspi_nor_write(struct device *dev, off_t addr, const void *src,
 		return -EINVAL;
 	}
 
+	nrfx_err_t res = NRFX_SUCCESS;
+
 	qspi_lock(dev);
 
-	nrfx_err_t res = nrfx_qspi_write(src, size, addr);
-
-	qspi_wait_for_completion(dev, res);
+	if (size < 4U) {
+		res = write_sub_word(dev, addr, src, size);
+	} else if (((uintptr_t)src < CONFIG_SRAM_BASE_ADDRESS)) {
+		res = write_from_nvmc(dev, addr, src, size);
+	} else {
+		res = nrfx_qspi_write(src, size, addr);
+		qspi_wait_for_completion(dev, res);
+	}
 
 	qspi_unlock(dev);
 

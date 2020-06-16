@@ -26,18 +26,19 @@
  * point is at half of the full scale voltage.
  */
 
-#if defined(CONFIG_BOARD_NUCLEO_L073RZ)
+#if defined(CONFIG_BOARD_NUCLEO_L073RZ) || \
+	defined(CONFIG_BOARD_NUCLEO_L152RE)
 
 /*
  * DAC output on PA4 (Arduino A2 pin of Nucleo board)
  * ADC input read from PA1 (Arduino A1 pin of Nucleo board)
  */
 
-#define DAC_DEVICE_NAME		DT_LABEL(DT_ALIAS(dac1))
+#define DAC_DEVICE_NAME		DT_LABEL(DT_NODELABEL(dac1))
 #define DAC_CHANNEL_ID		1
 #define DAC_RESOLUTION		12
 
-#define ADC_DEVICE_NAME		DT_LABEL(DT_ALIAS(adc1))
+#define ADC_DEVICE_NAME		DT_LABEL(DT_NODELABEL(adc1))
 #define ADC_CHANNEL_ID		1
 #define ADC_RESOLUTION		12
 #define ADC_GAIN		ADC_GAIN_1

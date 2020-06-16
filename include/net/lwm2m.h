@@ -183,8 +183,7 @@ typedef int (*lwm2m_engine_user_cb_t)(uint16_t obj_inst_id);
 
 /**
  * @brief Power source types used for the "Available Power Sources" resource of
- * the LwM2M Device object.  An LwM2M client can use one of the following
- * codes to register a power source using lwm2m_device_add_pwrsrc().
+ * the LwM2M Device object.
  */
 #define LWM2M_DEVICE_PWR_SRC_TYPE_DC_POWER	0
 #define LWM2M_DEVICE_PWR_SRC_TYPE_BAT_INT	1
@@ -224,48 +223,6 @@ typedef int (*lwm2m_engine_user_cb_t)(uint16_t obj_inst_id);
 #define LWM2M_DEVICE_BATTERY_STATUS_LOW		4
 #define LWM2M_DEVICE_BATTERY_STATUS_NOT_INST	5
 #define LWM2M_DEVICE_BATTERY_STATUS_UNKNOWN	6
-
-/**
- * @brief Register a power source with the LwM2M Device object.
- *
- * @param[in] pwr_src_type Power source type code.
- *
- * @return The newly added index of the power source.  The index is used
- *         for removing the power source, setting voltage or setting current.
- */
-__deprecated int lwm2m_device_add_pwrsrc(uint8_t pwr_src_type);
-
-/**
- * @brief Remove power source previously registered in the LwM2M Device object.
- *
- * @param[in] index Index of the power source returned by
- *                  lwm2m_device_add_pwrsrc().
- *
- * @return 0 for success or negative in case of error.
- */
-__deprecated int lwm2m_device_remove_pwrsrc(int index);
-
-/**
- * @brief Set power source voltage (in millivolts).
- *
- * @param[in] index Index of the power source returned by
- *                  lwm2m_device_add_pwrsrc().
- * @param[in] voltage_mv New voltage in millivolts.
- *
- * @return 0 for success or negative in case of error.
- */
-__deprecated int lwm2m_device_set_pwrsrc_voltage_mv(int index, int voltage_mv);
-
-/**
- * @brief Set power source current (in milliamps).
- *
- * @param[in] index Index of the power source returned by
- *                  lwm2m_device_add_pwrsrc().
- * @param[in] current_ma New current value milliamps.
- *
- * @return 0 for success or negative in case of error.
- */
-__deprecated int lwm2m_device_set_pwrsrc_current_ma(int index, int current_ma);
 
 /**
  * @brief Register a new error code with LwM2M Device object.
@@ -383,6 +340,19 @@ typedef struct float64_value {
 	int64_t val1;
 	int64_t val2;
 } float64_value_t;
+
+/**
+ * @brief Maximum value for ObjLnk resource fields
+ */
+#define LWM2M_OBJLNK_MAX_ID USHRT_MAX
+
+/**
+ * @brief LWM2M ObjLnk resource type structure
+ */
+struct lwm2m_objlnk {
+	uint16_t obj_id;
+	uint16_t obj_inst;
+};
 
 /**
  * @brief Create an LwM2M object instance.
@@ -529,6 +499,16 @@ int lwm2m_engine_set_float32(char *pathstr, float32_value_t *value);
 int lwm2m_engine_set_float64(char *pathstr, float64_value_t *value);
 
 /**
+ * @brief Set resource (instance) value (ObjLnk)
+ *
+ * @param[in] pathstr LwM2M path string "obj/obj-inst/res(/res-inst)"
+ * @param[in] value pointer to the lwm2m_objlnk structure
+ *
+ * @return 0 for success or negative in case of error.
+ */
+int lwm2m_engine_set_objlnk(char *pathstr, struct lwm2m_objlnk *value);
+
+/**
  * @brief Get resource (instance) value (opaque buffer)
  *
  * @param[in] pathstr LwM2M path string "obj/obj-inst/res(/res-inst)"
@@ -659,6 +639,17 @@ int lwm2m_engine_get_float32(char *pathstr, float32_value_t *buf);
  * @return 0 for success or negative in case of error.
  */
 int lwm2m_engine_get_float64(char *pathstr, float64_value_t *buf);
+
+/**
+ * @brief Get resource (instance) value (ObjLnk)
+ *
+ * @param[in] pathstr LwM2M path string "obj/obj-inst/res(/res-inst)"
+ * @param[out] buf lwm2m_objlnk buffer to copy data into
+ *
+ * @return 0 for success or negative in case of error.
+ */
+int lwm2m_engine_get_objlnk(char *pathstr, struct lwm2m_objlnk *buf);
+
 
 /**
  * @brief Set resource (instance) read callback

@@ -17,10 +17,6 @@
 #include "hal/ccm.h"
 #include "hal/ticker.h"
 
-#if defined(CONFIG_SOC_FAMILY_NRF)
-#include "hal/radio.h"
-#endif /* CONFIG_SOC_FAMILY_NRF */
-
 #include "util/util.h"
 #include "util/mem.h"
 #include "util/mfifo.h"
@@ -74,14 +70,36 @@
 
 #if defined(CONFIG_BT_BROADCASTER)
 #define BT_ADV_TICKER_NODES ((TICKER_ID_ADV_LAST) - (TICKER_ID_ADV_STOP) + 1)
-#else
+#if defined(CONFIG_BT_CTLR_ADV_EXT) && (CONFIG_BT_CTLR_ADV_AUX_SET > 0)
+#define BT_ADV_AUX_TICKER_NODES ((TICKER_ID_ADV_AUX_LAST) - \
+				 (TICKER_ID_ADV_AUX_BASE) + 1)
+#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
+#define BT_ADV_SYNC_TICKER_NODES ((TICKER_ID_ADV_SYNC_LAST) - \
+				  (TICKER_ID_ADV_SYNC_BASE) + 1)
+#else /* !CONFIG_BT_CTLR_ADV_PERIODIC */
+#define BT_ADV_SYNC_TICKER_NODES 0
+#endif /* !CONFIG_BT_CTLR_ADV_PERIODIC */
+#else /* (CONFIG_BT_CTLR_ADV_AUX_SET > 0) */
+#define BT_ADV_AUX_TICKER_NODES 0
+#define BT_ADV_SYNC_TICKER_NODES 0
+#endif /* (CONFIG_BT_CTLR_ADV_AUX_SET > 0) */
+#else /* !CONFIG_BT_BROADCASTER */
 #define BT_ADV_TICKER_NODES 0
-#endif
+#define BT_ADV_AUX_TICKER_NODES 0
+#define BT_ADV_SYNC_TICKER_NODES 0
+#endif /* !CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_OBSERVER)
 #define BT_SCAN_TICKER_NODES ((TICKER_ID_SCAN_LAST) - (TICKER_ID_SCAN_STOP) + 1)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+#define BT_SCAN_AUX_TICKER_NODES ((TICKER_ID_SCAN_AUX_LAST) - \
+				  (TICKER_ID_SCAN_AUX_BASE) + 1)
+#else /* !CONFIG_BT_CTLR_ADV_EXT */
+#define BT_SCAN_AUX_TICKER_NODES 0
+#endif /* !CONFIG_BT_CTLR_ADV_EXT */
 #else
 #define BT_SCAN_TICKER_NODES 0
+#define BT_SCAN_AUX_TICKER_NODES 0
 #endif
 
 #if defined(CONFIG_BT_CONN)
@@ -106,7 +124,10 @@
 
 #define TICKER_NODES              (TICKER_ID_ULL_BASE + \
 				   BT_ADV_TICKER_NODES + \
+				   BT_ADV_AUX_TICKER_NODES + \
+				   BT_ADV_SYNC_TICKER_NODES + \
 				   BT_SCAN_TICKER_NODES + \
+				   BT_SCAN_AUX_TICKER_NODES + \
 				   BT_CONN_TICKER_NODES + \
 				   FLASH_TICKER_NODES + \
 				   USER_TICKER_NODES)
@@ -174,7 +195,7 @@ static MFIFO_DEFINE(pdu_rx_free, sizeof(void *), PDU_RX_CNT);
 #define NODE_RX_HEADER_SIZE      (offsetof(struct node_rx_pdu, pdu))
 #define NODE_RX_STRUCT_OVERHEAD  (NODE_RX_HEADER_SIZE)
 
-#define PDU_ADVERTIZE_SIZE (PDU_AC_SIZE_MAX + PDU_AC_SIZE_EXTRA)
+#define PDU_ADVERTIZE_SIZE (PDU_AC_LL_SIZE_MAX + PDU_AC_LL_SIZE_EXTRA)
 #define PDU_DATA_SIZE      (PDU_DC_LL_HEADER_SIZE + LL_LENGTH_OCTETS_RX_MAX)
 
 #define PDU_RX_NODE_POOL_ELEMENT_SIZE                         \
@@ -536,6 +557,32 @@ void ll_rx_dequeue(void)
 
 	/* handle object specific clean up */
 	switch (rx->type) {
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	case NODE_RX_TYPE_EXT_1M_REPORT:
+	case NODE_RX_TYPE_EXT_2M_REPORT:
+	case NODE_RX_TYPE_EXT_CODED_REPORT:
+	{
+		struct node_rx_hdr *rx_curr;
+		struct pdu_adv *adv;
+
+		adv = (void *)((struct node_rx_pdu *)rx)->pdu;
+		if (adv->type != PDU_ADV_TYPE_EXT_IND) {
+			break;
+		}
+
+		rx_curr = rx->rx_ftr.extra;
+		while (rx_curr) {
+			memq_link_t *link_free;
+
+			link_free = rx_curr->link;
+			rx_curr = rx_curr->rx_ftr.extra;
+
+			mem_release(link_free, &mem_link_rx.free);
+		}
+	}
+	break;
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
+
 #if defined(CONFIG_BT_CONN)
 	case NODE_RX_TYPE_CONNECTION:
 	{
@@ -595,6 +642,9 @@ void ll_rx_dequeue(void)
 		if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY)) {
 			uint8_t bm;
 
+			/* FIXME: use the correct adv and scan set to get
+			 * enabled status bitmask
+			 */
 			bm = (IS_ENABLED(CONFIG_BT_OBSERVER) &&
 			      ull_scan_is_enabled(0) << 1) |
 			     (IS_ENABLED(CONFIG_BT_BROADCASTER) &&
@@ -614,11 +664,6 @@ void ll_rx_dequeue(void)
 #if defined(CONFIG_BT_OBSERVER)
 	case NODE_RX_TYPE_REPORT:
 #endif /* CONFIG_BT_OBSERVER */
-
-#if defined(CONFIG_BT_CTLR_ADV_EXT)
-	case NODE_RX_TYPE_EXT_1M_REPORT:
-	case NODE_RX_TYPE_EXT_CODED_REPORT:
-#endif /* CONFIG_BT_CTLR_ADV_EXT */
 
 #if defined(CONFIG_BT_CTLR_SCAN_REQ_NOTIFY)
 	case NODE_RX_TYPE_SCAN_REQ:
@@ -775,7 +820,9 @@ void ll_rx_mem_release(void **node_rx)
 #endif /* CONFIG_BT_OBSERVER */
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
+			/* fallthrough */
 		case NODE_RX_TYPE_EXT_1M_REPORT:
+		case NODE_RX_TYPE_EXT_2M_REPORT:
 		case NODE_RX_TYPE_EXT_CODED_REPORT:
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 
@@ -1550,6 +1597,46 @@ static inline int rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 	}
 	break;
 
+#if defined(CONFIG_BT_OBSERVER)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+	case NODE_RX_TYPE_EXT_1M_REPORT:
+	case NODE_RX_TYPE_EXT_2M_REPORT:
+	case NODE_RX_TYPE_EXT_CODED_REPORT:
+	{
+		struct pdu_adv *adv;
+		uint8_t phy = 0U;
+
+		memq_dequeue(memq_ull_rx.tail, &memq_ull_rx.head, NULL);
+
+		adv = (void *)((struct node_rx_pdu *)rx)->pdu;
+		if (adv->type != PDU_ADV_TYPE_EXT_IND) {
+			ll_rx_put(link, rx);
+			ll_rx_sched();
+			break;
+		}
+
+		switch (rx->type) {
+		case NODE_RX_TYPE_EXT_1M_REPORT:
+			phy = BIT(0);
+			break;
+		case NODE_RX_TYPE_EXT_2M_REPORT:
+			phy = BIT(1);
+			break;
+		case NODE_RX_TYPE_EXT_CODED_REPORT:
+			phy = BIT(2);
+			break;
+		default:
+			LL_ASSERT(0);
+			break;
+		}
+
+		/* TODO: below interface is WIP */
+		ull_scan_aux_setup(link, rx, phy);
+	}
+	break;
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
+#endif /* CONFIG_BT_OBSERVER */
+
 #if defined(CONFIG_BT_CONN)
 	case NODE_RX_TYPE_CONNECTION:
 	{
@@ -1589,11 +1676,6 @@ static inline int rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 #if defined(CONFIG_BT_OBSERVER)
 	case NODE_RX_TYPE_REPORT:
 #endif /* CONFIG_BT_OBSERVER */
-
-#if defined(CONFIG_BT_CTLR_ADV_EXT)
-	case NODE_RX_TYPE_EXT_1M_REPORT:
-	case NODE_RX_TYPE_EXT_CODED_REPORT:
-#endif /* CONFIG_BT_CTLR_ADV_EXT */
 
 #if defined(CONFIG_BT_CTLR_SCAN_REQ_NOTIFY)
 	case NODE_RX_TYPE_SCAN_REQ:
@@ -1658,6 +1740,15 @@ static inline void rx_demux_event_done(memq_link_t *link,
 		ull_conn_done(done);
 		break;
 #endif /* CONFIG_BT_CONN */
+
+#if defined(CONFIG_BT_OBSERVER)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+		/* fallthrough checkpatch workaround! */
+	case EVENT_DONE_EXTRA_TYPE_SCAN_AUX:
+		ull_scan_aux_done(done);
+		break;
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
+#endif /* CONFIG_BT_OBSERVER */
 
 #if defined(CONFIG_BT_CTLR_USER_EXT)
 	case EVENT_DONE_EXTRA_TYPE_USER_START

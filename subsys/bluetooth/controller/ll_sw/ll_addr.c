@@ -17,7 +17,10 @@
 #include "pdu.h"
 #include "lll.h"
 
+#include "lll_adv.h"
 #include "lll_scan.h"
+
+#include "ull_adv_types.h"
 #include "ull_scan_types.h"
 #include "ull_adv_internal.h"
 #include "ull_scan_internal.h"
@@ -48,9 +51,18 @@ uint8_t *ll_addr_get(uint8_t addr_type, uint8_t *bdaddr)
 
 uint32_t ll_addr_set(uint8_t addr_type, uint8_t const *const bdaddr)
 {
-	if (IS_ENABLED(CONFIG_BT_BROADCASTER) &&
-	    ull_adv_is_enabled(0)) {
-		return BT_HCI_ERR_CMD_DISALLOWED;
+	if (IS_ENABLED(CONFIG_BT_BROADCASTER)) {
+		uint32_t status = ull_adv_is_enabled(0);
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
+		if ((status & (ULL_ADV_ENABLED_BITMASK_ENABLED |
+			       ULL_ADV_ENABLED_BITMASK_EXTENDED)) ==
+		     ULL_ADV_ENABLED_BITMASK_ENABLED) {
+#else /* !CONFIG_BT_CTLR_ADV_EXT */
+		if (status) {
+#endif /* !CONFIG_BT_CTLR_ADV_EXT */
+			return BT_HCI_ERR_CMD_DISALLOWED;
+		}
 	}
 
 	if (IS_ENABLED(CONFIG_BT_OBSERVER) &&

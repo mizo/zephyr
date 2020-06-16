@@ -304,10 +304,7 @@ void radio_tx_enable(void)
 void radio_disable(void)
 {
 #if !defined(CONFIG_BT_CTLR_TIFS_HW)
-	hal_radio_nrf_ppi_channels_disable(BIT(HAL_SW_SWITCH_TIMER_CLEAR_PPI) |
-				 BIT(HAL_SW_SWITCH_GROUP_TASK_ENABLE_PPI));
-	hal_radio_nrf_ppi_group_disable(SW_SWITCH_TIMER_TASK_GROUP(0));
-	hal_radio_nrf_ppi_group_disable(SW_SWITCH_TIMER_TASK_GROUP(1));
+	hal_radio_sw_switch_cleanup();
 #endif /* !CONFIG_BT_CTLR_TIFS_HW */
 
 	NRF_RADIO->SHORTS = 0;
@@ -381,11 +378,9 @@ uint32_t radio_crc_is_valid(void)
 	return (NRF_RADIO->CRCSTATUS != 0);
 }
 
-static uint8_t MALIGN(4) _pkt_empty[PDU_EM_SIZE_MAX];
-static uint8_t MALIGN(4) _pkt_scratch[((HAL_RADIO_PDU_LEN_MAX + 3) >
-				    PDU_AC_SIZE_MAX) ?
-				   (HAL_RADIO_PDU_LEN_MAX + 3) :
-				   PDU_AC_SIZE_MAX];
+static uint8_t MALIGN(4) _pkt_empty[PDU_EM_LL_SIZE_MAX];
+static uint8_t MALIGN(4) _pkt_scratch[MAX((HAL_RADIO_PDU_LEN_MAX + 3),
+				       PDU_AC_LL_SIZE_MAX)];
 
 void *radio_pkt_empty_get(void)
 {
@@ -401,10 +396,9 @@ void *radio_pkt_scratch_get(void)
 	defined(CONFIG_BT_CTLR_LE_ENC) && \
 	(!defined(CONFIG_BT_CTLR_DATA_LENGTH_MAX) || \
 	 (CONFIG_BT_CTLR_DATA_LENGTH_MAX < (HAL_RADIO_PDU_LEN_MAX - 4)))
-static uint8_t MALIGN(4) _pkt_decrypt[((HAL_RADIO_PDU_LEN_MAX + 3) >
-				    PDU_AC_SIZE_MAX) ?
-				   (HAL_RADIO_PDU_LEN_MAX + 3) :
-				   PDU_AC_SIZE_MAX];
+static uint8_t MALIGN(4) _pkt_decrypt[MAX((HAL_RADIO_PDU_LEN_MAX + 3),
+				       PDU_AC_LL_SIZE_MAX)];
+
 void *radio_pkt_decrypt_get(void)
 {
 	return _pkt_decrypt;
@@ -782,7 +776,7 @@ uint32_t radio_tmr_start_now(uint8_t trx)
 		now = EVENT_TIMER->CC[1];
 	} while (now > start);
 
-	return start;
+	return start + 1;
 }
 
 uint32_t radio_tmr_start_get(void)
