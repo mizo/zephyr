@@ -684,6 +684,13 @@ static void read_supported_commands(struct net_buf *buf, struct net_buf **evt)
 	rp->commands[34] |= BIT(1) | BIT(2);
 #endif /* CONFIG_BT_HCI_RAW && CONFIG_BT_TINYCRYPT_ECC */
 
+#if defined(CONFIG_BT_OBSERVER)
+	/* LE Set Extended Scan Parameters */
+	rp->commands[37] |= BIT(5);
+	/* LE Set Extended Scan Enable */
+	rp->commands[37] |= BIT(6);
+#endif /* CONFIG_BT_OBSERVER */
+
 	/* LE Read TX Power. */
 	rp->commands[38] |= BIT(7);
 }
