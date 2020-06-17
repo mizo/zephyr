@@ -389,6 +389,8 @@ uint8_t ull_scan_disable(uint8_t handle, struct ll_scan_set *scan)
 	mark = ull_disable_unmark(scan);
 	LL_ASSERT(mark == scan);
 
+	scan->lll.phy = 0U;
+
 	return 0;
 }
 
