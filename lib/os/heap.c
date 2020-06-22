@@ -9,7 +9,8 @@
 
 static void *chunk_mem(struct z_heap *h, chunkid_t c)
 {
-	uint8_t *ret = ((uint8_t *)&h->buf[c]) + chunk_header_bytes(h);
+	chunk_unit_t *buf = chunk_buf(h);
+	uint8_t *ret = ((uint8_t *)&buf[c]) + chunk_header_bytes(h);
 
 	CHECK(!(((size_t)ret) & (big_heap(h) ? 7 : 3)));
 
@@ -21,56 +22,48 @@ static void free_list_remove(struct z_heap *h, int bidx,
 {
 	struct z_heap_bucket *b = &h->buckets[bidx];
 
-	CHECK(!used(h, c));
+	CHECK(!chunk_used(h, c));
 	CHECK(b->next != 0);
-	CHECK(b->list_size > 0);
-	CHECK((((h->avail_buckets & (1 << bidx)) == 0)
-	       == (h->buckets[bidx].next == 0)));
+	CHECK(h->avail_buckets & (1 << bidx));
 
-	b->list_size--;
-
-	if (b->list_size == 0) {
+	if (next_free_chunk(h, c) == c) {
+		/* this is the last chunk */
 		h->avail_buckets &= ~(1 << bidx);
 		b->next = 0;
 	} else {
-		chunkid_t first = free_prev(h, c), second = free_next(h, c);
+		chunkid_t first = prev_free_chunk(h, c),
+			  second = next_free_chunk(h, c);
 
 		b->next = second;
-		chunk_set(h, first, FREE_NEXT, second);
-		chunk_set(h, second, FREE_PREV, first);
+		set_next_free_chunk(h, first, second);
+		set_prev_free_chunk(h, second, first);
 	}
 }
 
 static void free_list_add(struct z_heap *h, chunkid_t c)
 {
-	int b = bucket_idx(h, size(h, c));
+	int bi = bucket_idx(h, chunk_size(h, c));
 
-	if (h->buckets[b].list_size++ == 0) {
-		CHECK(h->buckets[b].next == 0);
-		CHECK((h->avail_buckets & (1 << b)) == 0);
+	if (h->buckets[bi].next == 0) {
+		CHECK((h->avail_buckets & (1 << bi)) == 0);
 
 		/* Empty list, first item */
-		h->avail_buckets |= (1 << b);
-		h->buckets[b].next = c;
-		chunk_set(h, c, FREE_PREV, c);
-		chunk_set(h, c, FREE_NEXT, c);
+		h->avail_buckets |= (1 << bi);
+		h->buckets[bi].next = c;
+		set_prev_free_chunk(h, c, c);
+		set_next_free_chunk(h, c, c);
 	} else {
+		CHECK(h->avail_buckets & (1 << bi));
+
 		/* Insert before (!) the "next" pointer */
-		chunkid_t second = h->buckets[b].next;
-		chunkid_t first = free_prev(h, second);
+		chunkid_t second = h->buckets[bi].next;
+		chunkid_t first = prev_free_chunk(h, second);
 
-		chunk_set(h, c, FREE_PREV, first);
-		chunk_set(h, c, FREE_NEXT, second);
-		chunk_set(h, first, FREE_NEXT, c);
-		chunk_set(h, second, FREE_PREV, c);
+		set_prev_free_chunk(h, c, first);
+		set_next_free_chunk(h, c, second);
+		set_next_free_chunk(h, first, c);
+		set_prev_free_chunk(h, second, c);
 	}
-
-	CHECK(h->avail_buckets & (1 << bucket_idx(h, size(h, c))));
-}
-
-static ALWAYS_INLINE bool last_chunk(struct z_heap *h, chunkid_t c)
-{
-	return (c + size(h, c)) == h->len;
 }
 
 /* Allocates (fit check has already been perfomred) from the next
@@ -79,31 +72,29 @@ static ALWAYS_INLINE bool last_chunk(struct z_heap *h, chunkid_t c)
 static void *split_alloc(struct z_heap *h, int bidx, size_t sz)
 {
 	CHECK(h->buckets[bidx].next != 0
-	      && sz <= size(h, h->buckets[bidx].next));
+	      && sz <= chunk_size(h, h->buckets[bidx].next));
 
 	chunkid_t c = h->buckets[bidx].next;
 
 	free_list_remove(h, bidx, c);
 
 	/* Split off remainder if it's usefully large */
-	size_t rem = size(h, c) - sz;
+	size_t rem = chunk_size(h, c) - sz;
 
 	CHECK(rem < h->len);
 
-	if (rem >= (big_heap(h) ? 2 : 1)) {
+	if (rem >= min_chunk_size(h)) {
 		chunkid_t c2 = c + sz;
 		chunkid_t c3 = right_chunk(h, c);
 
-		chunk_set(h, c, SIZE_AND_USED, sz);
-		chunk_set(h, c2, SIZE_AND_USED, rem);
-		chunk_set(h, c2, LEFT_SIZE, sz);
-		if (!last_chunk(h, c2)) {
-			chunk_set(h, c3, LEFT_SIZE, rem);
-		}
+		set_chunk_size(h, c, sz);
+		set_chunk_size(h, c2, rem);
+		set_left_chunk_size(h, c2, sz);
+		set_left_chunk_size(h, c3, rem);
 		free_list_add(h, c2);
 	}
 
-	chunk_set_used(h, c, true);
+	set_chunk_used(h, c, true);
 
 	return chunk_mem(h, c);
 }
@@ -116,37 +107,47 @@ void sys_heap_free(struct sys_heap *heap, void *mem)
 
 	struct z_heap *h = heap->heap;
 	chunkid_t c = ((uint8_t *)mem - chunk_header_bytes(h)
-		       - (uint8_t *)h->buf) / CHUNK_UNIT;
+		       - (uint8_t *)chunk_buf(h)) / CHUNK_UNIT;
+
+	/*
+	 * This should catch many double-free cases.
+	 * This is cheap enough so let's do it all the time.
+	 */
+	__ASSERT(chunk_used(h, c),
+		 "unexpected heap state (double-free?) for memory at %p", mem);
+	/*
+	 * It is easy to catch many common memory overflow cases with
+	 * a quick check on this and next chunk header fields that are
+	 * immediately before and after the freed memory.
+	 */
+	__ASSERT(left_chunk(h, right_chunk(h, c)) == c,
+		 "corrupted heap bounds (buffer overflow?) for memory at %p", mem);
 
 	/* Merge with right chunk?  We can just absorb it. */
-	if (!last_chunk(h, c) && !used(h, right_chunk(h, c))) {
+	if (!chunk_used(h, right_chunk(h, c))) {
 		chunkid_t rc = right_chunk(h, c);
-		size_t newsz = size(h, c) + size(h, rc);
+		size_t newsz = chunk_size(h, c) + chunk_size(h, rc);
 
-		free_list_remove(h, bucket_idx(h, size(h, rc)), rc);
-		chunk_set(h, c, SIZE_AND_USED, newsz);
-		if (!last_chunk(h, c)) {
-			chunk_set(h, right_chunk(h, c), LEFT_SIZE, newsz);
-		}
+		free_list_remove(h, bucket_idx(h, chunk_size(h, rc)), rc);
+		set_chunk_size(h, c, newsz);
+		set_left_chunk_size(h, right_chunk(h, c), newsz);
 	}
 
 	/* Merge with left chunk?  It absorbs us. */
-	if (c != h->chunk0 && !used(h, left_chunk(h, c))) {
+	if (!chunk_used(h, left_chunk(h, c))) {
 		chunkid_t lc = left_chunk(h, c);
 		chunkid_t rc = right_chunk(h, c);
-		size_t csz = size(h, c);
-		size_t merged_sz = csz + size(h, lc);
+		size_t csz = chunk_size(h, c);
+		size_t merged_sz = csz + chunk_size(h, lc);
 
-		free_list_remove(h, bucket_idx(h, size(h, lc)), lc);
-		chunk_set(h, lc, SIZE_AND_USED, merged_sz);
-		if (!last_chunk(h, lc)) {
-			chunk_set(h, rc, LEFT_SIZE, merged_sz);
-		}
+		free_list_remove(h, bucket_idx(h, chunk_size(h, lc)), lc);
+		set_chunk_size(h, lc, merged_sz);
+		set_left_chunk_size(h, rc, merged_sz);
 
 		c = lc;
 	}
 
-	chunk_set_used(h, c, false);
+	set_chunk_used(h, c, false);
 	free_list_add(h, c);
 }
 
@@ -175,14 +176,16 @@ void *sys_heap_alloc(struct sys_heap *heap, size_t bytes)
 	 * fragmentation waste of the order of the block allocated
 	 * only.
 	 */
-	int loops = MIN(b->list_size, CONFIG_SYS_HEAP_ALLOC_LOOPS);
-
-	for (int i = 0; i < loops; i++) {
-		CHECK(b->next != 0);
-		if (size(h, b->next) >= sz) {
-			return split_alloc(h, bi, sz);
-		}
-		b->next = free_next(h, b->next);
+	if (b->next) {
+		chunkid_t first = b->next;
+		int i = CONFIG_SYS_HEAP_ALLOC_LOOPS;
+		do {
+			if (chunk_size(h, b->next) >= sz) {
+				return split_alloc(h, bi, sz);
+			}
+			b->next = next_free_chunk(h, b->next);
+			CHECK(b->next != 0);
+		} while (--i && b->next != first);
 	}
 
 	/* Otherwise pick the smallest non-empty bucket guaranteed to
@@ -201,38 +204,49 @@ void *sys_heap_alloc(struct sys_heap *heap, size_t bytes)
 
 void sys_heap_init(struct sys_heap *heap, void *mem, size_t bytes)
 {
-	/* Must fit in a 32 bit count of u64's */
-#if __SIZEOF_SIZE_T__ > 4
-	CHECK(bytes < 0x800000000ULL);
-#endif
+	/* Must fit in a 32 bit count of HUNK_UNIT */
+	CHECK(bytes / CHUNK_UNIT <= 0xffffffffU);
+
+	/* Reserve the final marker chunk's header */
+	CHECK(bytes > heap_footer_bytes(bytes));
+	bytes -= heap_footer_bytes(bytes);
 
 	/* Round the start up, the end down */
-	size_t addr = ((size_t)mem + CHUNK_UNIT - 1) & ~(CHUNK_UNIT - 1);
-	size_t end = ((size_t)mem + bytes) & ~(CHUNK_UNIT - 1);
+	uintptr_t addr = ROUND_UP(mem, CHUNK_UNIT);
+	uintptr_t end = ROUND_DOWN((uint8_t *)mem + bytes, CHUNK_UNIT);
 	size_t buf_sz = (end - addr) / CHUNK_UNIT;
-	size_t hdr_chunks = chunksz(sizeof(struct z_heap));
 
 	CHECK(end > addr);
+	CHECK(buf_sz > chunksz(sizeof(struct z_heap)));
 
 	struct z_heap *h = (struct z_heap *)addr;
-
-	heap->heap = (struct z_heap *)addr;
-	h->buf = (uint64_t *)addr;
-	h->buckets = (void *)(addr + CHUNK_UNIT * hdr_chunks);
+	heap->heap = h;
+	h->chunk0_hdr_area = 0;
 	h->len = buf_sz;
-	h->size_mask = (1 << (big_heap(h) ? 31 : 15)) - 1;
 	h->avail_buckets = 0;
 
-	size_t buckets_bytes = ((bucket_idx(h, buf_sz) + 1)
-				* sizeof(struct z_heap_bucket));
+	int nb_buckets = bucket_idx(h, buf_sz) + 1;
+	size_t chunk0_size = chunksz(sizeof(struct z_heap) +
+				     nb_buckets * sizeof(struct z_heap_bucket));
 
-	h->chunk0 = hdr_chunks + chunksz(buckets_bytes);
+	CHECK(chunk0_size + min_chunk_size(h) < buf_sz);
 
-	for (int i = 0; i <= bucket_idx(heap->heap, heap->heap->len); i++) {
-		heap->heap->buckets[i].list_size = 0;
-		heap->heap->buckets[i].next = 0;
+	for (int i = 0; i < nb_buckets; i++) {
+		h->buckets[i].next = 0;
 	}
 
-	chunk_set(h, h->chunk0, SIZE_AND_USED, buf_sz - h->chunk0);
-	free_list_add(h, h->chunk0);
+	/* chunk containing our struct z_heap */
+	set_chunk_size(h, 0, chunk0_size);
+	set_chunk_used(h, 0, true);
+
+	/* chunk containing the free heap */
+	set_chunk_size(h, chunk0_size, buf_sz - chunk0_size);
+	set_left_chunk_size(h, chunk0_size, chunk0_size);
+
+	/* the end marker chunk */
+	set_chunk_size(h, buf_sz, 0);
+	set_left_chunk_size(h, buf_sz, buf_sz - chunk0_size);
+	set_chunk_used(h, buf_sz, true);
+
+	free_list_add(h, chunk0_size);
 }
