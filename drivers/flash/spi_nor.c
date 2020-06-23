@@ -84,6 +84,11 @@ struct spi_nor_data {
 	struct k_sem sem;
 };
 
+static const struct flash_parameters flash_nor_parameters = {
+	.write_block_size = 1,
+	.erase_value = 0xff,
+};
+
 /* Capture the time at which the device entered deep power-down. */
 static inline void record_entered_dpd(const struct device *const dev)
 {
@@ -568,15 +573,23 @@ static void spi_nor_pages_layout(struct device *dev,
 }
 #endif /* CONFIG_FLASH_PAGE_LAYOUT */
 
+static const struct flash_parameters *
+flash_nor_get_parameters(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return &flash_nor_parameters;
+}
+
 static const struct flash_driver_api spi_nor_api = {
 	.read = spi_nor_read,
 	.write = spi_nor_write,
 	.erase = spi_nor_erase,
 	.write_protection = spi_nor_write_protection_set,
+	.get_parameters = flash_nor_get_parameters,
 #if defined(CONFIG_FLASH_PAGE_LAYOUT)
 	.page_layout = spi_nor_pages_layout,
 #endif
-	.write_block_size = 1,
 };
 
 static const struct spi_nor_config flash_id = {

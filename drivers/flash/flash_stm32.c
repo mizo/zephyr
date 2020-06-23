@@ -57,6 +57,18 @@ LOG_MODULE_REGISTER(flash_stm32, CONFIG_FLASH_LOG_LEVEL);
 
 #define CFG_HW_FLASH_SEMID	2
 
+static const struct flash_parameters flash_stm32_parameters = {
+#if DT_PROP(DT_INST(0, soc_nv_flash), write_block_size)
+	.write_block_size = DT_PROP(DT_INST(0, soc_nv_flash), write_block_size),
+#else
+#error Flash write block size not available
+	/* Flash Write block size is extracted from device tree */
+	/* as flash node property 'write-block-size' */
+#endif
+	/* WARNING: This value may be not valid for L0/L1 chips */
+	.erase_value = 0xff,
+};
+
 #if defined(CONFIG_MULTITHREADING)
 /*
  * This is named flash_stm32_sem_take instead of flash_stm32_lock (and
@@ -281,6 +293,14 @@ static int flash_stm32_write_protection(struct device *dev, bool enable)
 	return rc;
 }
 
+static const struct flash_parameters *
+flash_stm32_get_parameters(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return &flash_stm32_parameters;
+}
+
 static struct flash_stm32_priv flash_data = {
 	.regs = (FLASH_TypeDef *) DT_INST_REG_ADDR(0),
 #if defined(CONFIG_SOC_SERIES_STM32L4X) || \
@@ -299,15 +319,9 @@ static const struct flash_driver_api flash_stm32_api = {
 	.erase = flash_stm32_erase,
 	.write = flash_stm32_write,
 	.read = flash_stm32_read,
+	.get_parameters = flash_stm32_get_parameters,
 #ifdef CONFIG_FLASH_PAGE_LAYOUT
 	.page_layout = flash_stm32_page_layout,
-#endif
-#if DT_PROP(DT_INST(0, soc_nv_flash), write_block_size)
-	.write_block_size = DT_PROP(DT_INST(0, soc_nv_flash), write_block_size),
-#else
-#error Flash write block size not available
-	/* Flash Write block size is extracted from device tree */
-	/* as flash node property 'write-block-size' */
 #endif
 };
 
@@ -348,7 +362,7 @@ static int stm32_flash_init(struct device *dev)
 	flash_stm32_sem_init(dev);
 
 	LOG_DBG("Flash initialized. BS: %zu",
-		flash_stm32_api.write_block_size);
+		flash_stm32_parameters.write_block_size);
 
 #if ((CONFIG_FLASH_LOG_LEVEL >= LOG_LEVEL_DBG) && CONFIG_FLASH_PAGE_LAYOUT)
 	const struct flash_pages_layout *layout;
