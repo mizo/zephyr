@@ -533,8 +533,9 @@ uint8_t ll_adv_enable(uint8_t enable)
 
 		/* AdvA, fill here at enable */
 		if (pri_hdr->adv_addr) {
-			uint8_t const *tx_addr =
-					ll_adv_aux_random_addr_get(adv, NULL);
+			uint8_t tx_addr[BDADDR_SIZE];
+
+			ll_addr_get(adv->own_addr_type, tx_addr);
 
 			/* TODO: Privacy */
 
@@ -558,8 +559,9 @@ uint8_t ll_adv_enable(uint8_t enable)
 			sec_dptr = (uint8_t *)sec_hdr + sizeof(*sec_hdr);
 
 			if (sec_hdr->adv_addr) {
-				uint8_t const *tx_addr =
-					ll_adv_aux_random_addr_get(adv,	NULL);
+				uint8_t tx_addr[BDADDR_SIZE];
+
+				ll_addr_get(adv->own_addr_type, tx_addr);
 
 				/* TODO: Privacy */
 
