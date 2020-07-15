@@ -11,6 +11,7 @@ LOG_MODULE_REGISTER(net_tcp, CONFIG_NET_TCP_LOG_LEVEL);
 #include <stdio.h>
 #include <stdlib.h>
 #include <zephyr.h>
+#include <random/rand32.h>
 #include <net/net_pkt.h>
 #include <net/net_context.h>
 #include <net/udp.h>
@@ -1202,7 +1203,7 @@ next_state:
 			}
 		}
 
-		if (len) {
+		if (th && len) {
 			if (th_seq(th) == conn->ack) {
 				if (tcp_data_get(conn, pkt) < 0) {
 					break;

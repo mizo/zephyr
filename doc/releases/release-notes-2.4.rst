@@ -41,6 +41,11 @@ API Changes
   :ref:`experimental stability <api_lifecycle>`. See :ref:`util_api` for an API
   reference.
 
+* The :c:func:`wdt_feed` function will now return ``-EAGAIN`` if
+  issuing a feed would stall the caller.  Application code may need to
+  ignore this diagnostic result or initiate another feed operation
+  later.
+
 Deprecated in this release
 ==========================
 
@@ -233,6 +238,11 @@ Bluetooth
 
 * BLE split software Controller:
 
+* HCI Driver:
+
+  * bt_hci_evt_is_prio() removed, use bt_hci_evt_get_flags() instead when
+    CONFIG_BT_RECV_IS_RX_THREAD is defined and call bt_recv and bt_recv_prio
+    when their flag is set, otherwise always call bt_recv().
 
 Build and Infrastructure
 ************************

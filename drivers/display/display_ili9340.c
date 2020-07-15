@@ -67,6 +67,7 @@ static int ili9340_init(struct device *dev)
 	data->cs_ctrl.gpio_dev =
 		device_get_binding(DT_INST_SPI_DEV_CS_GPIOS_LABEL(0));
 	data->cs_ctrl.gpio_pin = DT_INST_SPI_DEV_CS_GPIOS_PIN(0);
+	data->cs_ctrl.gpio_dt_flags = DT_INST_SPI_DEV_CS_GPIOS_FLAGS(0);
 	data->cs_ctrl.delay = 0U;
 	data->spi_config.cs = &(data->cs_ctrl);
 #else
@@ -145,8 +146,8 @@ static int ili9340_write(const struct device *dev, const uint16_t x,
 	uint16_t write_h;
 
 	__ASSERT(desc->width <= desc->pitch, "Pitch is smaller then width");
-	__ASSERT((desc->pitch * ILI9340_RGB_SIZE * desc->height) <= desc->bu_size,
-			"Input buffer to small");
+	__ASSERT((desc->pitch * ILI9340_RGB_SIZE * desc->height)
+		 <= desc->buf_size, "Input buffer to small");
 
 	LOG_DBG("Writing %dx%d (w,h) @ %dx%d (x,y)", desc->width, desc->height,
 			x, y);

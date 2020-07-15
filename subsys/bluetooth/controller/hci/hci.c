@@ -293,12 +293,15 @@ static void reset(struct net_buf *buf, struct net_buf **evt)
 		ccst->status = 0x00;
 	}
 
+#if defined(CONFIG_BT_CONN)
+	conn_count = 0U;
+#endif
+
 #if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
 	hci_hbuf_total = 0;
 	hci_hbuf_sent = 0U;
 	hci_hbuf_acked = 0U;
 	(void)memset(hci_hbuf_pend, 0, sizeof(hci_hbuf_pend));
-	conn_count = 0U;
 	if (buf) {
 		atomic_set_bit(&hci_state_mask, HCI_STATE_BIT_RESET);
 		k_poll_signal_raise(hbuf_signal, 0x0);
@@ -1824,6 +1827,50 @@ static void le_clear_adv_sets(struct net_buf *buf, struct net_buf **evt)
 	ccst = hci_cmd_complete(evt, sizeof(*ccst));
 	ccst->status = status;
 }
+
+#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
+static void le_set_per_adv_param(struct net_buf *buf, struct net_buf **evt)
+{
+	struct bt_hci_cp_le_set_per_adv_param *cmd = (void *)buf->data;
+	struct bt_hci_evt_cc_status *ccst;
+	uint16_t interval;
+	uint16_t flags;
+	uint8_t status;
+
+	interval = sys_le16_to_cpu(cmd->max_interval);
+	flags = sys_le16_to_cpu(cmd->props);
+
+	status = ll_adv_sync_param_set(cmd->handle, interval, flags);
+
+	ccst = hci_cmd_complete(evt, sizeof(*ccst));
+	ccst->status = status;
+}
+
+static void le_set_per_adv_data(struct net_buf *buf, struct net_buf **evt)
+{
+	struct bt_hci_cp_le_set_per_adv_data *cmd = (void *)buf->data;
+	struct bt_hci_evt_cc_status *ccst;
+	uint8_t status;
+
+	status = ll_adv_sync_ad_data_set(cmd->handle, cmd->op, cmd->len,
+					 cmd->data);
+
+	ccst = hci_cmd_complete(evt, sizeof(*ccst));
+	ccst->status = status;
+}
+
+static void le_set_per_adv_enable(struct net_buf *buf, struct net_buf **evt)
+{
+	struct bt_hci_cp_le_set_per_adv_enable *cmd = (void *)buf->data;
+	struct bt_hci_evt_cc_status *ccst;
+	uint8_t status;
+
+	status = ll_adv_sync_enable(cmd->handle, cmd->enable);
+
+	ccst = hci_cmd_complete(evt, sizeof(*ccst));
+	ccst->status = status;
+}
+#endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
 #endif /* CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_OBSERVER)
@@ -2206,6 +2253,20 @@ static int controller_cmd_handle(uint16_t  ocf, struct net_buf *cmd,
 	case BT_OCF(BT_HCI_OP_CLEAR_ADV_SETS):
 		le_clear_adv_sets(cmd, evt);
 		break;
+
+#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
+	case BT_OCF(BT_HCI_OP_LE_SET_PER_ADV_PARAM):
+		le_set_per_adv_param(cmd, evt);
+		break;
+
+	case BT_OCF(BT_HCI_OP_LE_SET_PER_ADV_DATA):
+		le_set_per_adv_data(cmd, evt);
+		break;
+
+	case BT_OCF(BT_HCI_OP_LE_SET_PER_ADV_ENABLE):
+		le_set_per_adv_enable(cmd, evt);
+		break;
+#endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
 #endif /* CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_OBSERVER)
@@ -3710,8 +3771,8 @@ static void le_conn_complete(struct pdu_data *pdu_data, uint16_t handle,
 	lecc->clock_accuracy = node_rx->sca;
 }
 
-static void disconn_complete(struct pdu_data *pdu_data, uint16_t handle,
-			     struct net_buf *buf)
+void hci_disconn_complete_encode(struct pdu_data *pdu_data, uint16_t handle,
+				 struct net_buf *buf)
 {
 	struct bt_hci_evt_disconn_complete *ep;
 
@@ -3725,7 +3786,10 @@ static void disconn_complete(struct pdu_data *pdu_data, uint16_t handle,
 	ep->status = 0x00;
 	ep->handle = sys_cpu_to_le16(handle);
 	ep->reason = *((uint8_t *)pdu_data);
+}
 
+void hci_disconn_complete_process(uint16_t handle)
+{
 #if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
 	/* Clear any pending packets upon disconnection */
 	/* Note: This requires linear handle values starting from 0 */
@@ -3903,7 +3967,7 @@ static void encode_control(struct node_rx_pdu *node_rx,
 		break;
 
 	case NODE_RX_TYPE_TERMINATE:
-		disconn_complete(pdu_data, handle, buf);
+		hci_disconn_complete_encode(pdu_data, handle, buf);
 		break;
 
 	case NODE_RX_TYPE_CONN_UPDATE:
@@ -4110,8 +4174,8 @@ static void le_data_len_change(struct pdu_data *pdu_data, uint16_t handle,
 #endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 
 #if defined(CONFIG_BT_REMOTE_VERSION)
-void hci_remote_version_info_encode(struct pdu_data *pdu_data, uint16_t handle,
-				    struct net_buf *buf)
+static void remote_version_info_encode(struct pdu_data *pdu_data,
+				       uint16_t handle, struct net_buf *buf)
 {
 	struct pdu_data_llctrl_version_ind *ver_ind;
 	struct bt_hci_evt_remote_version_info *ep;
@@ -4151,7 +4215,7 @@ static void encode_data_ctrl(struct node_rx_pdu *node_rx,
 
 #if defined(CONFIG_BT_REMOTE_VERSION)
 	case PDU_DATA_LLCTRL_TYPE_VERSION_IND:
-		hci_remote_version_info_encode(pdu_data, handle, buf);
+		remote_version_info_encode(pdu_data, handle, buf);
 		break;
 #endif /* defined(CONFIG_BT_REMOTE_VERSION) */
 
