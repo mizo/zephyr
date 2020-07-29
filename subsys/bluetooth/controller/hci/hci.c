@@ -694,6 +694,11 @@ static void read_supported_commands(struct net_buf *buf, struct net_buf **evt)
 	rp->commands[37] |= BIT(6);
 #endif /* CONFIG_BT_OBSERVER */
 
+#if defined(CONFIG_BT_CONN)
+	/* LE Extended Create Connection Command */
+	rp->commands[37] |= BIT(7);
+#endif /* CONFIG_BT_CONN */
+
 	/* LE Read TX Power. */
 	rp->commands[38] |= BIT(7);
 }
