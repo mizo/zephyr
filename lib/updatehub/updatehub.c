@@ -146,6 +146,22 @@ is_compatible_hardware(struct resp_probe_some_boards *metadata_some_boards)
 	return false;
 }
 
+static void cleanup_connection(void)
+{
+	int i;
+
+	if (close(ctx.sock) < 0) {
+		LOG_ERR("Could not close the socket");
+	}
+
+	for (i = 0; i < ctx.nfds; i++) {
+		memset(&ctx.fds[i], 0, sizeof(ctx.fds[i]));
+	}
+
+	ctx.nfds = 0;
+	ctx.sock = 0;
+}
+
 static bool start_coap_client(void)
 {
 	struct addrinfo *addr;
@@ -185,44 +201,45 @@ static bool start_coap_client(void)
 		return false;
 	}
 
+	ret = 1;
+
 	ctx.sock = socket(addr->ai_family, SOCK_DGRAM, protocol);
 	if (ctx.sock < 0) {
 		LOG_ERR("Failed to create UDP socket");
-		return false;
+		goto error;
 	}
+
+	ret = -1;
 
 #if defined(CONFIG_UPDATEHUB_DTLS)
 	if (setsockopt(ctx.sock, SOL_TLS, TLS_SEC_TAG_LIST,
 		       sec_list, sizeof(sec_list)) < 0) {
 		LOG_ERR("Failed to set TLS_TAG option");
-		return false;
+		goto error;
 	}
 
 	if (setsockopt(ctx.sock, SOL_TLS, TLS_PEER_VERIFY, &verify, sizeof(int)) < 0) {
 		LOG_ERR("Failed to set TLS_PEER_VERIFY option");
-		return false;
+		goto error;
 	}
 #endif
 
 	if (connect(ctx.sock, addr->ai_addr, addr->ai_addrlen) < 0) {
 		LOG_ERR("Cannot connect to UDP remote");
-		return false;
+		goto error;
 	}
 
 	prepare_fds();
 
-	return true;
-}
+	ret = 0;
+error:
+	freeaddrinfo(addr);
 
-static void cleanup_connection(void)
-{
-	if (close(ctx.sock) < 0) {
-		LOG_ERR("Could not close the socket");
+	if (ret > 0) {
+		cleanup_connection();
 	}
 
-	memset(&ctx.fds[1], 0, sizeof(ctx.fds[1]));
-	ctx.nfds = 0;
-	ctx.sock = 0;
+	return (ret == 0) ? true : false;
 }
 
 static int send_request(enum coap_msgtype msgtype, enum coap_method method,
@@ -496,7 +513,11 @@ static enum updatehub_response install_update(void)
 		goto cleanup;
 	}
 
-	flash_img_init(&ctx.flash_ctx);
+	if (flash_img_init(&ctx.flash_ctx)) {
+		LOG_ERR("Unable init flash");
+		ctx.code_status = UPDATEHUB_FLASH_INIT_ERROR;
+		goto cleanup;
+	}
 
 	ctx.downloaded_size = 0;
 	updatehub_blk_set(UPDATEHUB_BLK_ATTEMPT, 0);
@@ -737,6 +758,8 @@ enum updatehub_response updatehub_probe(void)
 		ctx.code_status = UPDATEHUB_METADATA_ERROR;
 		goto error;
 	}
+
+	ctx.nfds = 0;
 
 	if (!start_coap_client()) {
 		ctx.code_status = UPDATEHUB_NETWORKING_ERROR;

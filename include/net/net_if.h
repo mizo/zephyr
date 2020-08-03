@@ -160,22 +160,6 @@ struct net_if_router {
 	uint8_t _unused : 5;
 };
 
-/*
- * Special alignment is needed for net_if which is stored in
- * a net_if linker section if there are more than one network
- * interface in the system. If there is only one network interface,
- * then this alignment is not needed, unfortunately this cannot be
- * known beforehand.
- *
- * The net_if struct needs to be aligned to 32 byte boundary,
- * otherwise the __net_if_end will point to wrong location and net_if
- * initialization done in net_if_init() will not find proper values
- * for the second interface.
- *
- * So this alignment is a workaround and should eventually be removed.
- */
-#define __net_if_align __aligned(32)
-
 enum net_if_flag {
 	/** Interface is up/ready to receive and transmit */
 	NET_IF_UP,
@@ -480,7 +464,7 @@ struct net_if {
 	 */
 	int tx_pending;
 #endif
-} __net_if_align;
+};
 
 /**
  * @brief Set a value in network interface flags
@@ -1946,11 +1930,14 @@ bool net_if_need_calc_tx_checksum(struct net_if *iface);
 /**
  * @brief Get interface according to index
  *
+ * @details This is a syscall only to provide access to the object for purposes
+ *          of assigning permissions.
+ *
  * @param index Interface index
  *
  * @return Pointer to interface or NULL if not found.
  */
-struct net_if *net_if_get_by_index(int index);
+__syscall struct net_if *net_if_get_by_index(int index);
 
 /**
  * @brief Get interface index according to pointer
@@ -2179,23 +2166,23 @@ struct net_if_api {
 		NET_IF_DHCPV4_INIT			\
 	}
 
-#define NET_IF_GET_NAME(dev_name, sfx) (__net_if_##dev_name##_##sfx)
-#define NET_IF_DEV_GET_NAME(dev_name, sfx) (__net_if_dev_##dev_name##_##sfx)
+#define NET_IF_GET_NAME(dev_name, sfx) __net_if_##dev_name##_##sfx
+#define NET_IF_DEV_GET_NAME(dev_name, sfx) __net_if_dev_##dev_name##_##sfx
 
 #define NET_IF_GET(dev_name, sfx)					\
 	((struct net_if *)&NET_IF_GET_NAME(dev_name, sfx))
 
 #define NET_IF_INIT(dev_name, sfx, _l2, _mtu, _num_configs)		\
-	static struct net_if_dev (NET_IF_DEV_GET_NAME(dev_name, sfx))	\
-	__used __attribute__((__section__(".net_if_dev.data"))) = {	\
+	static Z_STRUCT_SECTION_ITERABLE(net_if_dev,			\
+				NET_IF_DEV_GET_NAME(dev_name, sfx)) = { \
 		.dev = &(DEVICE_NAME_GET(dev_name)),			\
 		.l2 = &(NET_L2_GET_NAME(_l2)),				\
 		.l2_data = &(NET_L2_GET_DATA(dev_name, sfx)),		\
 		.mtu = _mtu,						\
 	};								\
-	static struct net_if						\
-	(NET_IF_GET_NAME(dev_name, sfx))[_num_configs] __used		\
-	__attribute__((__section__(".net_if.data"))) = {		\
+	static Z_DECL_ALIGN(struct net_if)				\
+		       NET_IF_GET_NAME(dev_name, sfx)[_num_configs]	\
+		       __used __in_section(_net_if, static, net_if) = {	\
 		[0 ... (_num_configs - 1)] = {				\
 			.if_dev = &(NET_IF_DEV_GET_NAME(dev_name, sfx)), \
 			NET_IF_CONFIG_INIT				\
@@ -2203,14 +2190,14 @@ struct net_if_api {
 	}
 
 #define NET_IF_OFFLOAD_INIT(dev_name, sfx, _mtu)			\
-	static struct net_if_dev (NET_IF_DEV_GET_NAME(dev_name, sfx)) __used \
-	__attribute__((__section__(".net_if_dev.data"))) = {		\
-		.dev = &(__device_##dev_name),				\
+	static Z_STRUCT_SECTION_ITERABLE(net_if_dev,			\
+				NET_IF_DEV_GET_NAME(dev_name, sfx)) = {	\
+		.dev = &(DEVICE_NAME_GET(dev_name)),			\
 		.mtu = _mtu,						\
 	};								\
-	static struct net_if						\
-	(NET_IF_GET_NAME(dev_name, sfx))[NET_IF_MAX_CONFIGS] __used	\
-	__attribute__((__section__(".net_if.data"))) = {		\
+	static Z_DECL_ALIGN(struct net_if)				\
+		NET_IF_GET_NAME(dev_name, sfx)[NET_IF_MAX_CONFIGS]	\
+		       __used __in_section(_net_if, static, net_if) = {	\
 		[0 ... (NET_IF_MAX_CONFIGS - 1)] = {			\
 			.if_dev = &(NET_IF_DEV_GET_NAME(dev_name, sfx)), \
 			NET_IF_CONFIG_INIT				\

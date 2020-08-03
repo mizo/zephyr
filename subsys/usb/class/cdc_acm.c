@@ -39,6 +39,7 @@
 
 #include <kernel.h>
 #include <init.h>
+#include <drivers/uart/cdc_acm.h>
 #include <drivers/uart.h>
 #include <string.h>
 #include <sys/ring_buffer.h>
@@ -175,6 +176,9 @@ struct cdc_acm_dev_data_t {
 	uart_irq_callback_user_data_t cb;
 	void *cb_data;
 	struct k_work cb_work;
+#if defined(CONFIG_CDC_ACM_DTE_RATE_CALLBACK_SUPPORT)
+	cdc_dte_rate_callback_t rate_cb;
+#endif
 	struct k_work tx_work;
 	/* Tx ready status. Signals when */
 	bool tx_ready;
@@ -198,6 +202,7 @@ struct cdc_acm_dev_data_t {
 };
 
 static sys_slist_t cdc_acm_data_devlist;
+static const struct uart_driver_api cdc_acm_driver_api;
 
 /**
  * @brief Handler called for Class requests not handled by the USB stack.
@@ -213,6 +218,8 @@ int cdc_acm_class_handle_req(struct usb_setup_packet *pSetup,
 {
 	struct cdc_acm_dev_data_t *dev_data;
 	struct usb_dev_data *common;
+	uint32_t rate;
+	uint32_t new_rate;
 
 	common = usb_get_dev_data_by_iface(&cdc_acm_data_devlist,
 					   (uint8_t)pSetup->wIndex);
@@ -226,13 +233,20 @@ int cdc_acm_class_handle_req(struct usb_setup_packet *pSetup,
 
 	switch (pSetup->bRequest) {
 	case SET_LINE_CODING:
+		rate = sys_le32_to_cpu(dev_data->line_coding.dwDTERate);
 		memcpy(&dev_data->line_coding,
 		       *data, sizeof(dev_data->line_coding));
+		new_rate = sys_le32_to_cpu(dev_data->line_coding.dwDTERate);
 		LOG_DBG("CDC_SET_LINE_CODING %d %d %d %d",
-			sys_le32_to_cpu(dev_data->line_coding.dwDTERate),
+			new_rate,
 			dev_data->line_coding.bCharFormat,
 			dev_data->line_coding.bParityType,
 			dev_data->line_coding.bDataBits);
+#if defined(CONFIG_CDC_ACM_DTE_RATE_CALLBACK_SUPPORT)
+		if (rate != new_rate && dev_data->rate_cb != NULL) {
+			dev_data->rate_cb(common->dev, new_rate);
+		}
+#endif
 		break;
 
 	case SET_CONTROL_LINE_STATE:
@@ -402,22 +416,18 @@ static void cdc_acm_do_cb(struct cdc_acm_dev_data_t *dev_data,
 	struct device *dev = dev_data->common.dev;
 	struct usb_cfg_data *cfg = (void *)dev->config_info;
 
-	/* Store the new status */
-	if (!(status == USB_DC_SOF || status == USB_DC_INTERFACE)) {
-		dev_data->usb_status = status;
-	}
-
 	/* Check the USB status and do needed action if required */
 	switch (status) {
 	case USB_DC_ERROR:
-		LOG_DBG("USB device error");
+		LOG_DBG("Device error");
 		break;
 	case USB_DC_RESET:
-		LOG_DBG("USB device reset detected");
+		LOG_DBG("Device reset detected");
 		cdc_acm_reset_port(dev_data);
+		dev_data->usb_status = status;
 		break;
 	case USB_DC_CONNECTED:
-		LOG_DBG("USB device connected");
+		LOG_DBG("Device connected");
 		break;
 	case USB_DC_CONFIGURED:
 		cdc_acm_read_cb(cfg->endpoint[ACM_OUT_EP_IDX].ep_addr, 0,
@@ -425,25 +435,34 @@ static void cdc_acm_do_cb(struct cdc_acm_dev_data_t *dev_data,
 		dev_data->tx_ready = true;
 		dev_data->tx_irq_ena = true;
 		dev_data->rx_irq_ena = true;
-		LOG_INF("USB device configured");
+		dev_data->usb_status = status;
+		LOG_INF("Device configured");
 		break;
 	case USB_DC_DISCONNECTED:
-		LOG_INF("USB device disconnected");
+		LOG_INF("Device disconnected");
 		cdc_acm_reset_port(dev_data);
+		dev_data->usb_status = status;
 		break;
 	case USB_DC_SUSPEND:
-		LOG_INF("USB device suspended");
+		LOG_INF("Device suspended");
+		dev_data->usb_status = status;
 		break;
 	case USB_DC_RESUME:
-		dev_data->usb_status = USB_DC_CONFIGURED;
-		LOG_INF("USB device resumed");
+		if (dev_data->usb_status == USB_DC_SUSPEND) {
+			cdc_acm_read_cb(cfg->endpoint[ACM_OUT_EP_IDX].ep_addr,
+					0, dev_data);
+			dev_data->usb_status = USB_DC_CONFIGURED;
+			LOG_INF("Define resumed");
+		} else {
+			LOG_DBG("Spurious resume event");
+		}
 		break;
 	case USB_DC_SOF:
 	case USB_DC_INTERFACE:
 		break;
 	case USB_DC_UNKNOWN:
 	default:
-		LOG_DBG("USB unknown state");
+		LOG_DBG("Unknown event");
 		break;
 	}
 }
@@ -500,7 +519,7 @@ static void cdc_acm_irq_callback_work_handler(struct k_work *work)
 
 	dev_data = CONTAINER_OF(work, struct cdc_acm_dev_data_t, cb_work);
 
-	dev_data->cb(dev_data->cb_data);
+	dev_data->cb(dev_data->common.dev, dev_data->cb_data);
 }
 
 /**
@@ -744,6 +763,22 @@ static void cdc_acm_irq_callback_set(struct device *dev,
 	dev_data->cb = cb;
 	dev_data->cb_data = cb_data;
 }
+
+#if defined(CONFIG_CDC_ACM_DTE_RATE_CALLBACK_SUPPORT)
+int cdc_acm_dte_rate_callback_set(struct device *dev,
+				  cdc_dte_rate_callback_t callback)
+{
+	struct cdc_acm_dev_data_t *const dev_data = DEV_DATA(dev);
+
+	if (dev->driver_api != &cdc_acm_driver_api) {
+		return -EINVAL;
+	}
+
+	dev_data->rate_cb = callback;
+
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_UART_LINE_CTRL
 

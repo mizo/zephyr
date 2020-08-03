@@ -5,9 +5,8 @@
  */
 
 #define DT_DRV_COMPAT inventek_eswifi
-#define LOG_LEVEL CONFIG_WIFI_LOG_LEVEL
-#include <logging/log.h>
-LOG_MODULE_REGISTER(wifi_eswifi_core);
+#include "eswifi_log.h"
+LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <zephyr.h>
 #include <kernel.h>
@@ -53,29 +52,30 @@ static int eswifi_reset(struct eswifi_dev *eswifi)
 
 static inline int __parse_ssid(char *str, char *ssid)
 {
-	/* fnt => '"SSID"' */
+	int i = 0;
 
-	if (!*str || (*str != '"')) {
-		return -EINVAL;
-	}
-
-	str++;
-	while (*str && (*str != '"')) {
-		*ssid++ = *str++;
-	}
-
-	*ssid = '\0';
+	/* fmt => "SSID" */
 
 	if (*str != '"') {
-		return -EINVAL;
+		return 0;
+	}
+	str++;
+
+	while (*str && (*str != '"') && i < WIFI_SSID_MAX_LEN) {
+		ssid[i++] = *str++;
 	}
 
-	return -EINVAL;
+	if (*str != '"') {
+		return 0;
+	}
+
+	return i;
 }
 
 static void __parse_scan_res(char *str, struct wifi_scan_result *res)
 {
 	int field = 0;
+	int ret;
 
 	/* fmt => #001,"SSID",MACADDR,RSSI,BITRATE,MODE,SECURITY,BAND,CHANNEL */
 
@@ -91,8 +91,7 @@ static void __parse_scan_res(char *str, struct wifi_scan_result *res)
 
 		switch (++field) {
 		case 1: /* SSID */
-			__parse_ssid(str, res->ssid);
-			res->ssid_length = strlen(res->ssid);
+			res->ssid_length = __parse_ssid(str, res->ssid);
 			str += res->ssid_length;
 			break;
 		case 2: /* mac addr */
@@ -181,7 +180,7 @@ static int __parse_ipv4_address(char *str, char *ssid, uint8_t ip[4])
 	unsigned int byte = -1;
 
 	/* fmt => [JOIN   ] SSID,192.168.2.18,0,0 */
-	while (*str) {
+	while (*str && byte < 4) {
 		if (byte == -1) {
 			if (!strncmp(str, ssid, strlen(ssid))) {
 				byte = 0U;
@@ -244,8 +243,8 @@ static int eswifi_connect(struct eswifi_dev *eswifi)
 	char *rsp;
 	int err;
 
-	LOG_DBG("Connecting to %s (pass=%s)", eswifi->sta.ssid,
-		eswifi->sta.pass);
+	LOG_DBG("Connecting to %s (pass=%s)", log_strdup(eswifi->sta.ssid),
+		log_strdup(eswifi->sta.pass));
 
 	eswifi_lock(eswifi);
 
@@ -671,6 +670,8 @@ static int eswifi_init(struct device *dev)
 		       CONFIG_SYSTEM_WORKQUEUE_PRIORITY - 1);
 
 	k_work_init(&eswifi->request_work, eswifi_request_work);
+
+	eswifi_shell_register(eswifi);
 
 	return 0;
 }

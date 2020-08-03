@@ -17,7 +17,8 @@
 /.github/				  @nashif
 /.github/workflows/                       @galak @nashif
 /.buildkite/				  @galak
-/arch/arc/                                @vonhust @ruuddw
+/MAINTAINERS.yml                          @ioannisg @MaureenHelm
+/arch/arc/                                @abrodkin @ruuddw
 /arch/arm/                                @MaureenHelm @galak @ioannisg
 /arch/arm/core/aarch32/cortex_m/cmse/     @ioannisg
 /arch/arm/core/aarch64/                   @carlocaione
@@ -25,7 +26,7 @@
 /arch/arm/include/aarch64/                @carlocaione
 /arch/arm/core/aarch32/cortex_a_r/        @MaureenHelm @galak @ioannisg @bbolen @stephanosio
 /arch/common/                             @andrewboie @ioannisg @andyross
-/soc/arc/snps_*/                          @vonhust @ruuddw
+/soc/arc/snps_*/                          @abrodkin @ruuddw
 /soc/nios2/                               @nashif @wentongwu
 /soc/arm/                                 @MaureenHelm @galak @ioannisg
 /soc/arm/arm/mps2/                        @fvincenzo
@@ -58,7 +59,7 @@
 /soc/x86/                                 @andrewboie
 /arch/xtensa/                             @andrewboie @dcpleung @andyross
 /soc/xtensa/                              @andrewboie @dcpleung @andyross
-/boards/arc/                              @vonhust @ruuddw
+/boards/arc/                              @abrodkin @ruuddw
 /boards/arm/                              @MaureenHelm @galak
 /boards/arm/96b_argonkey/                 @avisconti
 /boards/arm/96b_avenger96/                @Mani-Sadhasivam
@@ -116,6 +117,7 @@
 /boards/riscv/rv32m1_vega/                @MaureenHelm
 /boards/shields/                          @erwango
 /boards/shields/atmel_rf2xx/              @nandojve
+/boards/shields/esp_8266/                 @nandojve
 /boards/x86/                              @andrewboie @nashif
 /boards/xtensa/                           @nashif @dcpleung
 /boards/xtensa/intel_s1000_crb/           @sathishkuttan @dcpleung
@@ -138,6 +140,7 @@
 /drivers/*/*mcux*                         @MaureenHelm
 /drivers/*/*stm32*                        @erwango
 /drivers/*/*native_posix*                 @aescolar @daor-oti
+/drivers/*/*lpc11u6x*			  @mbittan @simonguinot
 /drivers/adc/                             @anangl
 /drivers/adc/adc_stm32.c                  @cybertale
 /drivers/bluetooth/                       @joerchan @jhedberg @Vudentz
@@ -157,6 +160,7 @@
 /drivers/dma/*dw*                         @tbursztyka
 /drivers/dma/*sam0*                       @Sizurka
 /drivers/dma/dma_stm32*                   @cybertale
+/drivers/dma/*pl330*                      @raveenp
 /drivers/eeprom/                          @henrikbrixandersen
 /drivers/eeprom/eeprom_stm32.c            @KwonTae-young
 /drivers/entropy/*rv32m1*                 @MaureenHelm
@@ -249,7 +253,7 @@
 /drivers/watchdog/wdt_handlers.c          @andrewboie
 /drivers/wifi/                            @jukkar @tbursztyka @pfalcon
 /drivers/wifi/eswifi/                     @loicpoulain
-/dts/arc/                                 @vonhust @ruuddw @iriszzw
+/dts/arc/                                 @abrodkin @ruuddw @iriszzw
 /dts/arm/atmel/sam4e*                     @nandojve
 /dts/arm/atmel/samr21.dtsi                @benpicco
 /dts/arm/atmel/sam*5*.dtsi                @benpicco
@@ -317,7 +321,7 @@
 /include/drivers/lora.h                   @Mani-Sadhasivam
 /include/drivers/peci.h                   @albertofloyd @franciscomunoz @scottwcpg
 /include/app_memory/                      @andrewboie
-/include/arch/arc/                        @vonhust @ruuddw
+/include/arch/arc/                        @abrodkin @ruuddw
 /include/arch/arc/arch.h                  @andrewboie
 /include/arch/arc/v2/irq.h                @andrewboie
 /include/arch/arm/aarch32/                @MaureenHelm @galak @ioannisg
@@ -411,6 +415,7 @@
 /scripts/kconfig/                         @ulfalizer
 /scripts/sanity_chk/expr_parser.py        @nashif
 /scripts/gen_app_partitions.py            @andrewboie
+/scripts/get_maintainer.py                @nashif
 /scripts/dts/                             @ulfalizer @galak
 /scripts/release/                         @nashif
 /scripts/ci/                              @nashif
@@ -423,6 +428,7 @@
 /scripts/gen_relocate_app.py              @wentongwu
 /scripts/requirements*.txt                @mbolivar @galak @nashif
 /scripts/tests/sanitycheck/               @aasthagr
+/scripts/tests/build/test_subfolder_list.py @rmstoi
 /scripts/tracing/                         @wentongwu
 /scripts/sanity_chk/                      @nashif
 /scripts/sanitycheck                      @nashif
@@ -455,8 +461,8 @@
 /subsys/fs/nvs/                           @Laczen
 /subsys/logging/                          @nordic-krch
 /subsys/logging/log_backend_net.c         @nordic-krch @jukkar
-/subsys/mgmt/                             @carlescufi @nvlsianpu
-/subsys/mgmt/smp_udp.c                    @aunsbjerg
+/subsys/mgmt/mcumgr/                      @carlescufi @nvlsianpu
+/subsys/mgmt/mcumgr/smp_udp.c             @aunsbjerg
 /subsys/net/buf.c                         @jukkar @jhedberg @tbursztyka @pfalcon
 /subsys/net/ip/                           @jukkar @tbursztyka @pfalcon
 /subsys/net/lib/                          @jukkar @tbursztyka @pfalcon

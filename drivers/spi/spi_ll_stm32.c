@@ -57,9 +57,10 @@ LOG_MODULE_REGISTER(spi_ll_stm32);
 uint32_t nop_tx;
 
 /* This function is executed in the interrupt context */
-static void dma_callback(void *arg, uint32_t channel, int status)
+static void dma_callback(struct device *dev, void *arg,
+			 uint32_t channel, int status)
 {
-	/* callback_arg directly holds the client data */
+	/* arg directly holds the client data */
 	struct spi_stm32_data *data = arg;
 
 	if (status != 0) {
@@ -128,7 +129,7 @@ static int spi_stm32_dma_tx_load(struct device *dev, const uint8_t *buf,
 	/* direction is given by the DT */
 	stream->dma_cfg.head_block = &blk_cfg;
 	/* give the client data as arg, as the callback comes from the dma */
-	stream->dma_cfg.callback_arg = data;
+	stream->dma_cfg.user_data = data;
 	/* pass our client origin to the dma: data->dma_tx.dma_channel */
 	ret = dma_config(data->dev_dma_tx, data->dma_tx.channel,
 			&stream->dma_cfg);
@@ -177,7 +178,7 @@ static int spi_stm32_dma_rx_load(struct device *dev, uint8_t *buf, size_t len)
 
 	/* direction is given by the DT */
 	stream->dma_cfg.head_block = &blk_cfg;
-	stream->dma_cfg.callback_arg = data;
+	stream->dma_cfg.user_data = data;
 
 
 	/* pass our client origin to the dma: data->dma_rx.channel */

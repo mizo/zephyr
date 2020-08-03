@@ -26,9 +26,12 @@ import glob
 import concurrent
 import xml.etree.ElementTree as ET
 import logging
+import pty
 from pathlib import Path
+import traceback
 from distutils.spawn import find_executable
 from colorama import Fore
+import pickle
 import platform
 import yaml
 try:
@@ -58,8 +61,9 @@ ZEPHYR_BASE = os.getenv("ZEPHYR_BASE")
 if not ZEPHYR_BASE:
     sys.exit("$ZEPHYR_BASE environment variable undefined")
 
+# This is needed to load edt.pickle files.
 sys.path.insert(0, os.path.join(ZEPHYR_BASE, "scripts", "dts"))
-import edtlib
+import edtlib  # pylint: disable=unused-import
 
 hw_map_local = threading.Lock()
 report_lock = threading.Lock()
@@ -522,7 +526,7 @@ class DeviceHandler(Handler):
         for i in self.suite.connected_hardware:
             if fixture and fixture not in i.get('fixtures', []):
                 continue
-            if i['platform'] == device and i['available'] and i['serial']:
+            if i['platform'] == device and i['available'] and (i['serial'] or i.get('serial_pty', None)):
                 return True
 
         return False
@@ -530,7 +534,7 @@ class DeviceHandler(Handler):
     def get_available_device(self, instance):
         device = instance.platform.name
         for i in self.suite.connected_hardware:
-            if i['platform'] == device and i['available'] and i['serial']:
+            if i['platform'] == device and i['available'] and (i['serial'] or i.get('serial_pty', None)):
                 i['available'] = False
                 i['counter'] += 1
                 return i
@@ -540,7 +544,7 @@ class DeviceHandler(Handler):
     def make_device_available(self, serial):
         with hw_map_local:
             for i in self.suite.connected_hardware:
-                if i['serial'] == serial:
+                if i['serial'] == serial or i.get('serial_pty', None):
                     i['available'] = True
 
     @staticmethod
@@ -612,7 +616,21 @@ class DeviceHandler(Handler):
             elif runner == "jlink":
                 command.append("--tool-opt=-SelectEmuBySN  %s" % (board_id))
 
-        serial_device = hardware['serial']
+        serial_pty = hardware.get('serial_pty', None)
+        if serial_pty:
+            master, slave = pty.openpty()
+
+            try:
+                ser_pty_process = subprocess.Popen(serial_pty, stdout=master, stdin=master, stderr=master)
+            except subprocess.CalledProcessError as error:
+                logger.error("Failed to run subprocess {}, error {}".format(serial_pty, error.output))
+                return
+
+            serial_device = os.ttyname(slave)
+        else:
+            serial_device = hardware['serial']
+
+        logger.debug("Using serial device {}".format(serial_device))
 
         try:
             ser = serial.Serial(
@@ -627,6 +645,12 @@ class DeviceHandler(Handler):
             self.set_state("failed", 0)
             self.instance.reason = "Failed"
             logger.error("Serial device error: %s" % (str(e)))
+
+            if serial_pty:
+                ser_pty_process.terminate()
+                outs, errs = ser_pty_process.communicate()
+                logger.debug("Process {} terminated outs: {} errs {}".format(serial_pty, outs, errs))
+
             self.make_device_available(serial_device)
             return
 
@@ -677,7 +701,6 @@ class DeviceHandler(Handler):
         if post_flash_script:
             self.run_custom_script(post_flash_script, 30)
 
-
         t.join(self.timeout)
         if t.is_alive():
             logger.debug("Timed out while monitoring serial output on {}".format(self.instance.platform.name))
@@ -685,6 +708,11 @@ class DeviceHandler(Handler):
 
         if ser.isOpen():
             ser.close()
+
+        if serial_pty:
+            ser_pty_process.terminate()
+            outs, errs = ser_pty_process.communicate()
+            logger.debug("Process {} terminated outs: {} errs {}".format(serial_pty, outs, errs))
 
         os.close(write_pipe)
         os.close(read_pipe)
@@ -784,14 +812,18 @@ class QEMUHandler(Handler):
         while True:
             this_timeout = int((timeout_time - time.time()) * 1000)
             if this_timeout < 0 or not p.poll(this_timeout):
-                if pid and this_timeout > 0:
-                    #there is possibility we polled nothing because
-                    #of host not scheduled QEMU process enough CPU
-                    #time during p.poll(this_timeout)
-                    cpu_time = QEMUHandler._get_cpu_time(pid)
-                    if cpu_time < timeout and not out_state:
-                        timeout_time = time.time() + (timeout - cpu_time)
-                        continue
+                try:
+                    if pid and this_timeout > 0:
+                        #there's possibility we polled nothing because
+                        #of not enough CPU time scheduled by host for
+                        #QEMU process during p.poll(this_timeout)
+                        cpu_time = QEMUHandler._get_cpu_time(pid)
+                        if cpu_time < timeout and not out_state:
+                            timeout_time = time.time() + (timeout - cpu_time)
+                            continue
+                except ProcessLookupError:
+                    out_state = "failed"
+                    break
 
                 if not out_state:
                     out_state = "timeout"
@@ -840,8 +872,6 @@ class QEMUHandler(Handler):
                         timeout_time = time.time() + 30
                     else:
                         timeout_time = time.time() + 2
-            else:
-                logger.debug("got nothing from harness")
             line = ""
 
         handler.record(harness)
@@ -850,15 +880,17 @@ class QEMUHandler(Handler):
         logger.debug("QEMU complete (%s) after %f seconds" %
                      (out_state, handler_time))
 
-        handler.set_state(out_state, handler_time)
-
         if out_state == "timeout":
             handler.instance.reason = "Timeout"
+            handler.set_state("failed", handler_time)
         elif out_state == "failed":
             handler.instance.reason = "Failed"
-        elif out_state in ['unexpected eof', 'unexpected byte']:
             handler.set_state("failed", handler_time)
+        elif out_state in ['unexpected eof', 'unexpected byte']:
             handler.instance.reason = out_state
+            handler.set_state("failed", handler_time)
+        else:
+            handler.set_state(out_state, handler_time)
 
         log_out_fp.close()
         out_fp.close()
@@ -936,10 +968,9 @@ class QEMUHandler(Handler):
             if os.path.exists(self.pid_fn):
                 os.unlink(self.pid_fn)
 
-
         logger.debug(f"return code from qemu: {self.returncode}")
 
-        if self.returncode != 0:
+        if self.returncode != 0 or not harness.state:
             self.set_state("failed", 0)
             self.instance.reason = "Exited with {}".format(self.returncode)
 
@@ -1240,12 +1271,6 @@ class SanityConfigParser:
             d[k] = v
 
         for k, v in self.tests[name].items():
-            if k not in valid_keys:
-                raise ConfigurationError(
-                    self.filename,
-                    "Unknown config key '%s' in definition for '%s'" %
-                    (k, name))
-
             if k in d:
                 if isinstance(d[k], str):
                     # By default, we just concatenate string values of keys
@@ -1307,6 +1332,7 @@ class Platform:
         self.ram = 128
 
         self.ignore_tags = []
+        self.only_tags = []
         self.default = False
         # if no flash size is specified by the board, take a default of 512K
         self.flash = 512
@@ -1331,6 +1357,7 @@ class Platform:
         self.ram = data.get("ram", 128)
         testing = data.get("testing", {})
         self.ignore_tags = testing.get("ignore_tags", [])
+        self.only_tags = testing.get("only_tags", [])
         self.default = testing.get("default", False)
         # if no flash size is specified by the board, take a default of 512K
         self.flash = data.get("flash", 512)
@@ -1411,6 +1438,7 @@ class TestCase(DisablePyTestCollectionMixin):
         self.depends_on = None
         self.min_flash = -1
         self.extra_sections = None
+        self.integration_platforms = []
 
     @staticmethod
     def get_unique(testcase_root, workdir, name):
@@ -1765,17 +1793,21 @@ class CMake():
 
     def run_cmake(self, args=[]):
 
-        ldflags = "-Wl,--fatal-warnings"
-        logger.debug("Running cmake on %s for %s" % (self.source_dir, self.platform.name))
+        if self.warnings_as_errors:
+            ldflags = "-Wl,--fatal-warnings"
+            cflags = "-Werror"
+            aflags = "-Wa,--fatal-warnings"
+        else:
+            ldflags = cflags = aflags = ""
 
-        # fixme: add additional cflags based on options
+        logger.debug("Running cmake on %s for %s" % (self.source_dir, self.platform.name))
         cmake_args = [
-            '-B{}'.format(self.build_dir),
-            '-S{}'.format(self.source_dir),
-            '-DEXTRA_CFLAGS="-Werror ',
-            '-DEXTRA_AFLAGS=-Wa,--fatal-warnings',
-            '-DEXTRA_LDFLAGS="{}'.format(ldflags),
-            '-G{}'.format(self.generator)
+            f'-B{self.build_dir}',
+            f'-S{self.source_dir}',
+            f'-DEXTRA_CFLAGS="{cflags}"',
+            f'-DEXTRA_AFLAGS="{aflags}',
+            f'-DEXTRA_LDFLAGS="{ldflags}"',
+            f'-G{self.generator}'
         ]
 
         if self.cmake_only:
@@ -1870,12 +1902,12 @@ class FilterBuilder(CMake):
         filter_data.update(self.defconfig)
         filter_data.update(self.cmake_cache)
 
-        dts_path = os.path.join(self.build_dir, "zephyr", self.platform.name + ".dts.pre.tmp")
+        edt_pickle = os.path.join(self.build_dir, "zephyr", "edt.pickle")
         if self.testcase and self.testcase.tc_filter:
             try:
-                if os.path.exists(dts_path):
-                    edt = edtlib.EDT(dts_path, [os.path.join(ZEPHYR_BASE, "dts", "bindings")],
-                            warn_reg_unit_address_mismatch=False)
+                if os.path.exists(edt_pickle):
+                    with open(edt_pickle, 'rb') as f:
+                        edt = pickle.load(f)
                 else:
                     edt = None
                 res = expr_parser.parse(self.testcase.tc_filter, filter_data, edt)
@@ -1916,6 +1948,7 @@ class ProjectBuilder(FilterBuilder):
         self.generator = kwargs.get('generator', None)
         self.generator_cmd = kwargs.get('generator_cmd', None)
         self.verbose = kwargs.get('verbose', None)
+        self.warnings_as_errors = kwargs.get('warnings_as_errors', True)
 
     @staticmethod
     def log_info(filename, inline_logs):
@@ -2256,6 +2289,7 @@ class TestSuite(DisablePyTestCollectionMixin):
                        "arch_whitelist": {"type": "set"},
                        "arch_exclude": {"type": "set"},
                        "extra_sections": {"type": "list", "default": []},
+                       "integration_platforms": {"type": "list", "default": []},
                        "platform_exclude": {"type": "set"},
                        "platform_whitelist": {"type": "set"},
                        "toolchain_exclude": {"type": "set"},
@@ -2299,6 +2333,7 @@ class TestSuite(DisablePyTestCollectionMixin):
         self.west_runner = None
         self.generator = None
         self.generator_cmd = None
+        self.warnings_as_errors = True
 
         # Keep track of which test cases we've filtered out and why
         self.testcases = {}
@@ -2326,6 +2361,9 @@ class TestSuite(DisablePyTestCollectionMixin):
 
         # hardcoded for now
         self.connected_hardware = []
+
+        # run integration tests only
+        self.integration = False
 
     def get_platform_instances(self, platform):
         filtered_dict = {k:v for k,v in self.instances.items() if k.startswith(platform + "/")}
@@ -2597,6 +2635,7 @@ class TestSuite(DisablePyTestCollectionMixin):
                         tc.depends_on = tc_dict["depends_on"]
                         tc.min_flash = tc_dict["min_flash"]
                         tc.extra_sections = tc_dict["extra_sections"]
+                        tc.integration_platforms = tc_dict["integration_platforms"]
 
                         tc.parse_subcases(tc_path)
 
@@ -2720,6 +2759,10 @@ class TestSuite(DisablePyTestCollectionMixin):
                     discards[instance] = "Not runnable on device"
                     continue
 
+                if self.integration and tc.integration_platforms and plat.name not in tc.integration_platforms:
+                    discards[instance] = "Not part of integration platforms"
+                    continue
+
                 if tc.skip:
                     discards[instance] = "Skip filter"
                     continue
@@ -2798,7 +2841,11 @@ class TestSuite(DisablePyTestCollectionMixin):
                     continue
 
                 if set(plat.ignore_tags) & tc.tags:
-                    discards[instance] = "Excluded tags per platform"
+                    discards[instance] = "Excluded tags per platform (exclude_tags)"
+                    continue
+
+                if plat.only_tags and not set(plat.only_tags) & tc.tags:
+                    discards[instance] = "Excluded tags per platform (only_tags)"
                     continue
 
                 # if nothing stopped us until now, it means this configuration
@@ -2904,7 +2951,8 @@ class TestSuite(DisablePyTestCollectionMixin):
                                         inline_logs=self.inline_logs,
                                         generator=self.generator,
                                         generator_cmd=self.generator_cmd,
-                                        verbose=self.verbose
+                                        verbose=self.verbose,
+                                        warnings_as_errors=self.warnings_as_errors
                                         )
                     future_to_test[executor.submit(pb.process, message)] = test.name
 
@@ -2914,7 +2962,9 @@ class TestSuite(DisablePyTestCollectionMixin):
                     try:
                         data = future.result()
                     except Exception as exc:
-                        logger.error('%r generated an exception: %s' % (test, exc))
+                        logger.error('%r generated an exception:' % (test,))
+                        for line in traceback.format_exc().splitlines():
+                            logger.error(line)
                         sys.exit('%r generated an exception: %s' % (test, exc))
 
                     else:
@@ -3010,7 +3060,7 @@ class TestSuite(DisablePyTestCollectionMixin):
             for _, instance in inst.items():
                 handler_time = instance.metrics.get('handler_time', 0)
                 duration += handler_time
-                if full_report:
+                if full_report and not instance.build_only:
                     for k in instance.results.keys():
                         if instance.results[k] == 'PASS':
                             passes += 1
@@ -3028,8 +3078,10 @@ class TestSuite(DisablePyTestCollectionMixin):
                             fails += 1
                     elif instance.status == 'skipped':
                         skips += 1
-                    else:
+                    elif instance.status == 'passed':
                         passes += 1
+                    else:
+                        logger.error(f"Unknown status {instance.status}")
 
             total = (errors + passes + fails + skips)
             # do not produce a report if no tests were actually run (only built)
@@ -3074,7 +3126,6 @@ class TestSuite(DisablePyTestCollectionMixin):
 
                 if full_report:
                     for k in instance.results.keys():
-
                         # remove testcases that are being re-run from exiting reports
                         for tc in eleTestsuite.findall(f'testcase/[@name="{k}"]'):
                             eleTestsuite.remove(tc)
@@ -3084,7 +3135,9 @@ class TestSuite(DisablePyTestCollectionMixin):
                             eleTestsuite, 'testcase',
                             classname=classname,
                             name="%s" % (k), time="%f" % handler_time)
-                        if instance.results[k] in ['FAIL', 'BLOCK']:
+
+                        if instance.results[k] in ['FAIL', 'BLOCK'] or \
+                            (instance.build_only and instance.status in ["error", "failed", "timeout"]):
                             if instance.results[k] == 'FAIL':
                                 el = ET.SubElement(
                                     eleTestcase,
@@ -3092,7 +3145,6 @@ class TestSuite(DisablePyTestCollectionMixin):
                                     type="failure",
                                     message="failed")
                             else:
-
                                 el = ET.SubElement(
                                     eleTestcase,
                                     'error',
@@ -3102,9 +3154,11 @@ class TestSuite(DisablePyTestCollectionMixin):
                             log_file = os.path.join(p, "handler.log")
                             el.text = self.process_log(log_file)
 
-                        elif instance.results[k] == 'PASS':
+                        elif instance.results[k] == 'PASS' \
+                            or (instance.build_only and instance.status in ["passed"]):
                             pass
-                        elif instance.results[k] == 'SKIP':
+                        elif instance.results[k] == 'SKIP' \
+                            or (instance.build_only and instance.status in ["skipped"]):
                             el = ET.SubElement(eleTestcase, 'skipped', type="skipped", message="Skipped")
                         else:
                             el = ET.SubElement(
@@ -3126,6 +3180,7 @@ class TestSuite(DisablePyTestCollectionMixin):
                         classname=classname,
                         name="%s" % (instance.testcase.name),
                         time="%f" % handler_time)
+
                     if instance.status in ["error", "failed", "timeout"]:
                         failure = ET.SubElement(
                             eleTestcase,
@@ -3152,6 +3207,7 @@ class TestSuite(DisablePyTestCollectionMixin):
         with open(filename, 'wb') as report:
             report.write(result)
 
+        return fails, passes, errors, skips
 
     def csv_report(self, filename):
         with open(filename, "wt") as csvfile:
@@ -3415,14 +3471,21 @@ class HardwareMap:
         self.detected = []
         self.connected_hardware = []
 
-    def load_device_from_cmdline(self, serial, platform):
+    def load_device_from_cmdline(self, serial, platform, is_pty):
         device = {
-            "serial": serial,
+            "serial": None,
             "platform": platform,
+            "serial_pty": None,
             "counter": 0,
             "available": True,
             "connected": True
         }
+
+        if is_pty:
+            device['serial_pty'] = serial
+        else:
+            device['serial'] = serial
+
         self.connected_hardware.append(device)
 
     def load_hardware_map(self, map_file):

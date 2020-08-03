@@ -191,7 +191,7 @@ static void uarte_nrfx_isr_int(void *arg)
 	}
 
 	if (data->int_driven->cb) {
-		data->int_driven->cb(data->int_driven->cb_data);
+		data->int_driven->cb(dev, data->int_driven->cb_data);
 	}
 }
 #endif /* UARTE_INTERRUPT_DRIVEN */
@@ -468,6 +468,21 @@ static int uarte_nrfx_init(struct device *dev)
 			     NRF_UARTE_INT_RXTO_MASK);
 	nrf_uarte_enable(uarte);
 
+	/**
+	 * Stop any currently running RX operations. This can occur when a
+	 * bootloader sets up the UART hardware and does not clean it up
+	 * before jumping to the next application.
+	 */
+	if (nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_RXSTARTED)) {
+		nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STOPRX);
+		while (!nrf_uarte_event_check(uarte, NRF_UARTE_EVENT_RXTO)) {
+			/* Busy wait for event to register */
+		}
+		nrf_uarte_event_clear(uarte, NRF_UARTE_EVENT_RXSTARTED);
+		nrf_uarte_event_clear(uarte, NRF_UARTE_EVENT_ENDRX);
+		nrf_uarte_event_clear(uarte, NRF_UARTE_EVENT_RXTO);
+	}
+
 	k_timer_init(&data->async->rx_timeout_timer, rx_timeout, NULL);
 	k_timer_user_data_set(&data->async->rx_timeout_timer, dev);
 	k_timer_init(&data->async->tx_timeout_timer, tx_timeout, NULL);
@@ -622,7 +637,7 @@ static void user_callback(struct device *dev, struct uart_event *evt)
 	struct uarte_nrfx_data *data = get_dev_data(dev);
 
 	if (data->async->user_callback) {
-		data->async->user_callback(evt, data->async->user_data);
+		data->async->user_callback(dev, evt, data->async->user_data);
 	}
 }
 
@@ -1268,6 +1283,7 @@ static int uarte_instance_init(struct device *dev,
 	NRF_UARTE_Type *uarte = get_uarte_instance(dev);
 	struct uarte_nrfx_data *data = get_dev_data(dev);
 
+	nrf_uarte_disable(uarte);
 
 	nrf_gpio_pin_write(config->pseltxd, 1);
 	nrf_gpio_cfg_output(config->pseltxd);
