@@ -26,6 +26,9 @@
 #include "lll_tim_internal.h"
 #include "lll_prof_internal.h"
 
+#include <bluetooth/hci.h>
+#include "lll_filter.h"
+
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
 #define LOG_MODULE_NAME bt_ctlr_lll_scan_aux
 #include "common/log.h"
@@ -321,6 +324,9 @@ static int isr_rx_pdu(struct lll_scan_aux *lll, uint8_t rssi_ready)
 			    radio_rx_chain_delay_get(lll->phy, 1);
 
 	ftr->rssi = (rssi_ready) ? (radio_rssi_get() & 0x7f) : 0x7f;
+#if defined(CONFIG_BT_CTLR_PRIVACY)
+	ftr->rl_idx = FILTER_IDX_NONE;
+#endif /* CONFIG_BT_CTLR_PRIVACY */
 
 	ull_rx_put(node_rx->hdr.link, node_rx);
 	ull_rx_sched();
