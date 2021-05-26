@@ -532,6 +532,8 @@ static int send_seg(struct bt_mesh_net_tx *net_tx, struct net_buf_simple *sdu,
 
 		BT_DBG("seg %u: %s", seg_o, bt_hex(buf, len));
 
+		tx->seg[seg_o] = buf;
+
 		if (IS_ENABLED(CONFIG_BT_MESH_FRIEND)) {
 			enum bt_mesh_friend_pdu_type type;
 
@@ -552,11 +554,11 @@ static int send_seg(struct bt_mesh_net_tx *net_tx, struct net_buf_simple *sdu,
 				 * out through the Friend Queue.
 				 */
 				k_mem_slab_free(&segs, &buf);
-				continue;
+				tx->seg[seg_o] = NULL;
 			}
+
 		}
 
-		tx->seg[seg_o] = buf;
 	}
 
 	/* This can happen if segments only went into the Friend Queue */
@@ -1857,7 +1859,7 @@ void bt_mesh_rpl_clear(void)
 	(void)memset(bt_mesh.rpl, 0, sizeof(bt_mesh.rpl));
 }
 
-void bt_mesh_heartbeat_send(void)
+int bt_mesh_heartbeat_send(const struct bt_mesh_send_cb *cb, void *cb_data)
 {
 	struct bt_mesh_cfg_srv *cfg = bt_mesh_cfg_get();
 	uint16_t feat = 0U;
@@ -1880,7 +1882,7 @@ void bt_mesh_heartbeat_send(void)
 
 	/* Do nothing if heartbeat publication is not enabled */
 	if (cfg->hb_pub.dst == BT_MESH_ADDR_UNASSIGNED) {
-		return;
+		return 0;
 	}
 
 	hb.init_ttl = cfg->hb_pub.ttl;
@@ -1905,8 +1907,8 @@ void bt_mesh_heartbeat_send(void)
 
 	BT_DBG("InitTTL %u feat 0x%04x", cfg->hb_pub.ttl, feat);
 
-	bt_mesh_ctl_send(&tx, TRANS_CTL_OP_HEARTBEAT, &hb, sizeof(hb),
-			 NULL, NULL);
+	return bt_mesh_ctl_send(&tx, TRANS_CTL_OP_HEARTBEAT, &hb, sizeof(hb),
+				cb, cb_data);
 }
 
 int bt_mesh_app_key_get(const struct bt_mesh_subnet *subnet, uint16_t app_idx,

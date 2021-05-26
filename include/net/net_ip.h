@@ -166,14 +166,14 @@ typedef size_t socklen_t;
 /** Socket address struct for IPv6. */
 struct sockaddr_in6 {
 	sa_family_t		sin6_family;   /* AF_INET6               */
-	uint16_t			sin6_port;     /* Port number            */
+	uint16_t		sin6_port;     /* Port number            */
 	struct in6_addr		sin6_addr;     /* IPv6 address           */
 	uint8_t			sin6_scope_id; /* interfaces for a scope */
 };
 
 struct sockaddr_in6_ptr {
 	sa_family_t		sin6_family;   /* AF_INET6               */
-	uint16_t			sin6_port;     /* Port number            */
+	uint16_t		sin6_port;     /* Port number            */
 	struct in6_addr		*sin6_addr;    /* IPv6 address           */
 	uint8_t			sin6_scope_id; /* interfaces for a scope */
 };
@@ -181,35 +181,35 @@ struct sockaddr_in6_ptr {
 /** Socket address struct for IPv4. */
 struct sockaddr_in {
 	sa_family_t		sin_family;    /* AF_INET      */
-	uint16_t			sin_port;      /* Port number  */
+	uint16_t		sin_port;      /* Port number  */
 	struct in_addr		sin_addr;      /* IPv4 address */
 };
 
 struct sockaddr_in_ptr {
 	sa_family_t		sin_family;    /* AF_INET      */
-	uint16_t			sin_port;      /* Port number  */
+	uint16_t		sin_port;      /* Port number  */
 	struct in_addr		*sin_addr;     /* IPv4 address */
 };
 
 /** Socket address struct for packet socket. */
 struct sockaddr_ll {
 	sa_family_t sll_family;   /* Always AF_PACKET        */
-	uint16_t       sll_protocol; /* Physical-layer protocol */
+	uint16_t    sll_protocol; /* Physical-layer protocol */
 	int         sll_ifindex;  /* Interface number        */
-	uint16_t       sll_hatype;   /* ARP hardware type       */
-	uint8_t        sll_pkttype;  /* Packet type             */
-	uint8_t        sll_halen;    /* Length of address       */
-	uint8_t        sll_addr[8];  /* Physical-layer address  */
+	uint16_t    sll_hatype;   /* ARP hardware type       */
+	uint8_t     sll_pkttype;  /* Packet type             */
+	uint8_t     sll_halen;    /* Length of address       */
+	uint8_t     sll_addr[8];  /* Physical-layer address  */
 };
 
 struct sockaddr_ll_ptr {
 	sa_family_t sll_family;   /* Always AF_PACKET        */
-	uint16_t       sll_protocol; /* Physical-layer protocol */
+	uint16_t    sll_protocol; /* Physical-layer protocol */
 	int         sll_ifindex;  /* Interface number        */
-	uint16_t       sll_hatype;   /* ARP hardware type       */
-	uint8_t        sll_pkttype;  /* Packet type             */
-	uint8_t        sll_halen;    /* Length of address       */
-	uint8_t        *sll_addr;    /* Physical-layer address  */
+	uint16_t    sll_hatype;   /* ARP hardware type       */
+	uint8_t     sll_pkttype;  /* Packet type             */
+	uint8_t     sll_halen;    /* Length of address       */
+	uint8_t     *sll_addr;    /* Physical-layer address  */
 };
 
 struct sockaddr_can_ptr {
@@ -260,11 +260,11 @@ struct cmsghdr {
 #if !defined(CMSG_NXTHDR)
 #define CMSG_NXTHDR(msghdr, cmsg)					 \
 	(((cmsg) == NULL) ? CMSG_FIRSTHDR(msghdr) :			 \
-	 (((uint8_t *)(cmsg) + ALIGN_H((cmsg)->cmsg_len)	+		 \
+	 (((uint8_t *)(cmsg) + ALIGN_H((cmsg)->cmsg_len) +		 \
 	   ALIGN_D(sizeof(struct cmsghdr)) >				 \
 	   (uint8_t *)((msghdr)->msg_control) + (msghdr)->msg_controllen) ? \
 	  NULL :							 \
-	  (struct cmsghdr *)((uint8_t *)(cmsg) +				 \
+	  (struct cmsghdr *)((uint8_t *)(cmsg) +			 \
 			     ALIGN_H((cmsg)->cmsg_len))))
 #endif
 
@@ -415,8 +415,8 @@ enum net_priority {
 struct net_tuple {
 	struct net_addr *remote_addr;  /**< IPv6/IPv4 remote address */
 	struct net_addr *local_addr;   /**< IPv6/IPv4 local address  */
-	uint16_t remote_port;             /**< UDP/TCP remote port      */
-	uint16_t local_port;              /**< UDP/TCP local port       */
+	uint16_t remote_port;          /**< UDP/TCP remote port      */
+	uint16_t local_port;           /**< UDP/TCP local port       */
 	enum net_ip_protocol ip_proto; /**< IP protocol              */
 };
 
@@ -905,12 +905,28 @@ static inline bool net_ipv6_is_addr_mcast_scope(const struct in6_addr *addr,
 }
 
 /**
+ * @brief Check if the IPv6 addresses have the same multicast scope (FFyx::).
+ *
+ * @param addr_1 IPv6 address 1
+ * @param addr_2 IPv6 address 2
+ *
+ * @return True if both addresses have same multicast scope,
+ * false otherwise.
+ */
+static inline bool net_ipv6_is_same_mcast_scope(const struct in6_addr *addr_1,
+						const struct in6_addr *addr_2)
+{
+	return (addr_1->s6_addr[0] == 0xff) && (addr_2->s6_addr[0] == 0xff) &&
+			(addr_1->s6_addr[1] == addr_2->s6_addr[1]);
+}
+
+/**
  * @brief Check if the IPv6 address is a global multicast address (FFxE::/16).
  *
  * @param addr IPv6 address.
  *
  * @return True if the address is global multicast address, false otherwise.
-*/
+ */
 static inline bool net_ipv6_is_addr_mcast_global(const struct in6_addr *addr)
 {
 	return net_ipv6_is_addr_mcast_scope(addr, 0x0e);
@@ -928,6 +944,20 @@ static inline bool net_ipv6_is_addr_mcast_global(const struct in6_addr *addr)
 static inline bool net_ipv6_is_addr_mcast_iface(const struct in6_addr *addr)
 {
 	return net_ipv6_is_addr_mcast_scope(addr, 0x01);
+}
+
+/**
+ * @brief Check if the IPv6 address is a link local scope multicast
+ * address (FFx2::).
+ *
+ * @param addr IPv6 address.
+ *
+ * @return True if the address is a link local scope multicast address,
+ * false otherwise.
+ */
+static inline bool net_ipv6_is_addr_mcast_link(const struct in6_addr *addr)
+{
+	return net_ipv6_is_addr_mcast_scope(addr, 0x02);
 }
 
 /**

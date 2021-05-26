@@ -2,7 +2,7 @@
  * Parts derived from tests/kernel/fatal/src/main.c, which has the
  * following copyright and license:
  *
- * Copyright (c) 2017 Intel Corporation
+ * Copyright (c) 2017, 2020 Intel Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -85,6 +85,7 @@ void test_main(void)
 			 ztest_unit_test(test_access_kobject_without_init_with_access),
 			 ztest_unit_test(test_kobject_reinitialize_thread_kobj),
 			 ztest_unit_test(test_create_new_thread_from_user),
+			 ztest_unit_test(test_mark_thread_exit_uninitialized),
 			 ztest_unit_test(
 				 test_new_user_thread_with_in_use_stack_obj),
 			 ztest_unit_test(

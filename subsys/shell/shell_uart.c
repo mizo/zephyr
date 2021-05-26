@@ -178,6 +178,16 @@ static int init(const struct shell_transport *transport,
 
 static int uninit(const struct shell_transport *transport)
 {
+	const struct shell_uart *sh_uart = (struct shell_uart *)transport->ctx;
+
+	if (IS_ENABLED(CONFIG_SHELL_BACKEND_SERIAL_INTERRUPT_DRIVEN)) {
+		struct device *dev = sh_uart->ctrl_blk->dev;
+
+		uart_irq_rx_disable(dev);
+	} else {
+		k_timer_stop(sh_uart->timer);
+	}
+
 	return 0;
 }
 
@@ -273,6 +283,10 @@ static int enable_shell_uart(struct device *arg)
 
 	if (dev == NULL) {
 		return -ENODEV;
+	}
+
+	if (IS_ENABLED(CONFIG_MCUMGR_SMP_SHELL)) {
+		smp_shell_init();
 	}
 
 	shell_init(&shell_uart, dev, true, log_backend, level);

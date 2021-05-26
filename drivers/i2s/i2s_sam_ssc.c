@@ -97,9 +97,9 @@ struct i2s_sam_dev_data {
 
 #define DEV_NAME(dev) ((dev)->name)
 #define DEV_CFG(dev) \
-	((const struct i2s_sam_dev_cfg *const)(dev)->config_info)
+	((const struct i2s_sam_dev_cfg *const)(dev)->config)
 #define DEV_DATA(dev) \
-	((struct i2s_sam_dev_data *const)(dev)->driver_data)
+	((struct i2s_sam_dev_data *const)(dev)->data)
 
 #define MODULO_INC(val, max) { val = (++val < max) ? val : 0; }
 

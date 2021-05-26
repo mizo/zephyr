@@ -152,9 +152,9 @@ struct uart_xlnx_ps_dev_data_t {
 
 #define DEV_CFG(dev) \
 	((const struct uart_xlnx_ps_dev_config * const) \
-	 (dev)->config_info)
+	 (dev)->config)
 #define DEV_DATA(dev) \
-	((struct uart_xlnx_ps_dev_data_t *)(dev)->driver_data)
+	((struct uart_xlnx_ps_dev_data_t *)(dev)->data)
 
 static const struct uart_driver_api uart_xlnx_ps_driver_api;
 

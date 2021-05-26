@@ -3222,6 +3222,10 @@ static inline int k_work_submit_to_user_queue(struct k_work_q *work_q,
  * This routine indicates if work item @a work is pending in a workqueue's
  * queue.
  *
+ * @note Checking if the work is pending gives no guarantee that the
+ *       work will still be pending when this information is used. It is up to
+ *       the caller to make sure that this information is used in a safe manner.
+ *
  * @note Can be called by ISRs.
  *
  * @param work Address of work item.
@@ -3232,6 +3236,25 @@ static inline bool k_work_pending(struct k_work *work)
 {
 	return atomic_test_bit(work->flags, K_WORK_STATE_PENDING);
 }
+
+/**
+ * @brief  Check if a delayed work item is pending.
+ *
+ * This routine indicates if the work item @a work is pending in a workqueue's
+ * queue or waiting for the delay timeout.
+ *
+ * @note Checking if the delayed work is pending gives no guarantee that the
+ *       work will still be pending when this information is used. It is up to
+ *       the caller to make sure that this information is used in a safe manner.
+ *
+ * @note Can be called by ISRs.
+ *
+ * @param work Address of delayed work item.
+ *
+ * @return true if work item is waiting for the delay to expire or pending on a
+ *         work queue, or false if it is not pending.
+ */
+bool k_delayed_work_pending(struct k_delayed_work *work);
 
 /**
  * @brief Start a workqueue.
@@ -5299,139 +5322,6 @@ extern bool z_is_thread_essential(void);
  * @internal
  */
 extern void z_timer_expiration_handler(struct _timeout *t);
-
-/**
- * @defgroup mem_domain_apis Memory domain APIs
- * @ingroup kernel_apis
- * @{
- */
-
-/**
- * @def K_MEM_PARTITION_DEFINE
- * @brief Used to declare a memory partition
- */
-#ifdef _ARCH_MEM_PARTITION_ALIGN_CHECK
-#define K_MEM_PARTITION_DEFINE(name, start, size, attr) \
-	_ARCH_MEM_PARTITION_ALIGN_CHECK(start, size); \
-	struct k_mem_partition name =\
-		{ (uintptr_t)start, size, attr}
-#else
-#define K_MEM_PARTITION_DEFINE(name, start, size, attr) \
-	struct k_mem_partition name =\
-		{ (uintptr_t)start, size, attr}
-#endif /* _ARCH_MEM_PARTITION_ALIGN_CHECK */
-
-/* memory partition */
-struct k_mem_partition {
-	/** start address of memory partition */
-	uintptr_t start;
-	/** size of memory partition */
-	size_t size;
-#if defined(CONFIG_MEMORY_PROTECTION)
-	/** attribute of memory partition */
-	k_mem_partition_attr_t attr;
-#endif /* CONFIG_MEMORY_PROTECTION */
-};
-
-/**
- * @brief Memory Domain
- *
- */
-struct k_mem_domain {
-#ifdef CONFIG_USERSPACE
-	/** partitions in the domain */
-	struct k_mem_partition partitions[CONFIG_MAX_DOMAIN_PARTITIONS];
-#endif	/* CONFIG_USERSPACE */
-	/** domain q */
-	sys_dlist_t mem_domain_q;
-	/** number of partitions in the domain */
-	uint8_t num_partitions;
-};
-
-
-/**
- * @brief Initialize a memory domain.
- *
- * Initialize a memory domain with given name and memory partitions.
- *
- * See documentation for k_mem_domain_add_partition() for details about
- * partition constraints.
- *
- * @param domain The memory domain to be initialized.
- * @param num_parts The number of array items of "parts" parameter.
- * @param parts An array of pointers to the memory partitions. Can be NULL
- *              if num_parts is zero.
- */
-extern void k_mem_domain_init(struct k_mem_domain *domain, uint8_t num_parts,
-			      struct k_mem_partition *parts[]);
-/**
- * @brief Destroy a memory domain.
- *
- * Destroy a memory domain.
- *
- * @param domain The memory domain to be destroyed.
- */
-extern void k_mem_domain_destroy(struct k_mem_domain *domain);
-
-/**
- * @brief Add a memory partition into a memory domain.
- *
- * Add a memory partition into a memory domain. Partitions must conform to
- * the following constraints:
- *
- * - Partition bounds must be within system RAM boundaries on MMU-based
- *   systems.
- * - Partitions in the same memory domain may not overlap each other.
- * - Partitions must not be defined which expose private kernel
- *   data structures or kernel objects.
- * - The starting address alignment, and the partition size must conform to
- *   the constraints of the underlying memory management hardware, which
- *   varies per architecture.
- * - Memory domain partitions are only intended to control access to memory
- *   from user mode threads.
- *
- * Violating these constraints may lead to CPU exceptions or undefined
- * behavior.
- *
- * @param domain The memory domain to be added a memory partition.
- * @param part The memory partition to be added
- */
-extern void k_mem_domain_add_partition(struct k_mem_domain *domain,
-				      struct k_mem_partition *part);
-
-/**
- * @brief Remove a memory partition from a memory domain.
- *
- * Remove a memory partition from a memory domain.
- *
- * @param domain The memory domain to be removed a memory partition.
- * @param part The memory partition to be removed
- */
-extern void k_mem_domain_remove_partition(struct k_mem_domain *domain,
-					 struct k_mem_partition *part);
-
-/**
- * @brief Add a thread into a memory domain.
- *
- * Add a thread into a memory domain.
- *
- * @param domain The memory domain that the thread is going to be added into.
- * @param thread ID of thread going to be added into the memory domain.
- *
- */
-extern void k_mem_domain_add_thread(struct k_mem_domain *domain,
-				    k_tid_t thread);
-
-/**
- * @brief Remove a thread from its memory domain.
- *
- * Remove a thread from its memory domain.
- *
- * @param thread ID of thread going to be removed from its memory domain.
- */
-extern void k_mem_domain_remove_thread(k_tid_t thread);
-
-/** @} */
 
 #ifdef CONFIG_PRINTK
 /**

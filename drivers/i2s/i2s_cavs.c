@@ -158,9 +158,9 @@ struct i2s_cavs_dev_data {
 
 #define DEV_NAME(dev) ((dev)->name)
 #define DEV_CFG(dev) \
-	((const struct i2s_cavs_config *const)(dev)->config_info)
+	((const struct i2s_cavs_config *const)(dev)->config)
 #define DEV_DATA(dev) \
-	((struct i2s_cavs_dev_data *const)(dev)->driver_data)
+	((struct i2s_cavs_dev_data *const)(dev)->data)
 
 I2S_DEVICE_OBJECT_DECLARE(1);
 I2S_DEVICE_OBJECT_DECLARE(2);

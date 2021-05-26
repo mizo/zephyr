@@ -72,6 +72,11 @@ API Changes
   To maintain original behaviour within user code, two argument invocations
   should be converted to pass a third argument ``FS_O_CREATE | FS_O_RDWR``.
 
+* The struct device got 3 attributes renamed: ``config_info`` to ``config``,
+  ``driver_api`` to ``api`` and finally ``driver_data`` to ``data``.
+  This renaming was done to get rid of legacy names, for which the reasons
+  do no longer apply.
+
 Deprecated in this release
 ==========================
 
@@ -145,6 +150,11 @@ Drivers and Sensors
 
 * Bluetooth
 
+  * L2CAP RX MTU is now controlled by CONFIG_BT_L2CAP_RX_MTU when
+    CONFIG_BT_ACL_FLOW_CONTROL is disabled, previously this was controlled
+    by CONFIG_BT_RX_BUF_LEN. If CONFIG_BT_RX_BUF_LEN has been changed from its
+    default value then CONFIG_BT_L2CAP_RX_MTU should be set to
+    CONFIG_BT_RX_BUF_LEN - 8.
 
 * CAN
 
@@ -244,12 +254,31 @@ Drivers and Sensors
 
 * SPI
 
+  * The SPI driver subsystem has been updated to use the flags specified
+    in the cs-gpios devicetree properties rather than the
+    SPI_CS_ACTIVE_LOW/HIGH configuration options.  Devicetree files that
+    specify 0 for this field will probably need to be updated to specify
+    GPIO_ACTIVE_LOW.  SPI_CS_ACTIVE_LOW/HIGH are still used for chip
+    selects that are not specified by a cs-gpios property.
+
 
 * Timer
 
 
 * USB
 
+  * The usb_enable() function, which, for some samples, was invoked
+    automatically on system boot up, now needs to be explicitly called
+    by the application in order to enable the USB subsystem. If your
+    application relies on any of the following Kconfig options, then
+    it shall also enable the USB subsystem:
+
+    * :option:`CONFIG_OPENTHREAD_NCP_SPINEL_ON_UART_ACM`
+    * :option:`CONFIG_USB_DEVICE_NETWORK_ECM`
+    * :option:`CONFIG_USB_DEVICE_NETWORK_EEM`
+    * :option:`CONFIG_USB_DEVICE_NETWORK_RNDIS`
+    * :option:`CONFIG_TRACING_BACKEND_USB`
+    * :option:`CONFIG_USB_UART_CONSOLE`
 
 * Video
 
@@ -283,6 +312,18 @@ Build and Infrastructure
 ************************
 
 * Devicetree
+
+* Support for multiple SOC and ARCH roots.
+  The :ref:`SOC_ROOT <application>` and ``ARCH_ROOT`` variables used to specify
+  support files for out of tree SoCs and architectures now accept multiple
+  paths, separated by semicolons. As a result, the ``SOC_DIR`` Kconfig variable
+  is no longer supported.
+
+  Uses like ``source $(SOC_DIR)/<path>`` must be changed to
+  ``rsource <relative>/<path>`` or similar.
+
+* BOARD, SOC, DTS, and ARCH roots can now be specified in each module's
+  :file:`zephyr/module.yml` file; see :ref:`modules_build_settings`.
 
 Libraries / Subsystems
 **********************
@@ -326,6 +367,9 @@ Libraries / Subsystems
     system. LVGL maintainers are currently investigating ways for reducing the
     library footprint when some options are not enabled, so you should wait for
     future releases if higher ROM usage is a concern for your application.
+
+* Tracing:
+  * Tracing backed API now checks if init function exists prio to calling it.
 
 HALs
 ****

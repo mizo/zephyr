@@ -68,8 +68,8 @@ static void wait_synchronization(SercomSpi *regs)
 static int spi_sam0_configure(struct device *dev,
 			      const struct spi_config *config)
 {
-	const struct spi_sam0_config *cfg = dev->config_info;
-	struct spi_sam0_data *data = dev->driver_data;
+	const struct spi_sam0_config *cfg = dev->config;
+	struct spi_sam0_data *data = dev->data;
 	SercomSpi *regs = cfg->regs;
 	SERCOM_SPI_CTRLA_Type ctrla = {.reg = 0};
 	SERCOM_SPI_CTRLB_Type ctrlb = {.reg = 0};
@@ -303,7 +303,7 @@ static void spi_sam0_fast_transceive(struct device *dev,
 				     const struct spi_buf_set *tx_bufs,
 				     const struct spi_buf_set *rx_bufs)
 {
-	const struct spi_sam0_config *cfg = dev->config_info;
+	const struct spi_sam0_config *cfg = dev->config;
 	size_t tx_count = 0;
 	size_t rx_count = 0;
 	SercomSpi *regs = cfg->regs;
@@ -390,8 +390,8 @@ static int spi_sam0_transceive(struct device *dev,
 			       const struct spi_buf_set *tx_bufs,
 			       const struct spi_buf_set *rx_bufs)
 {
-	const struct spi_sam0_config *cfg = dev->config_info;
-	struct spi_sam0_data *data = dev->driver_data;
+	const struct spi_sam0_config *cfg = dev->config;
+	struct spi_sam0_data *data = dev->data;
 	SercomSpi *regs = cfg->regs;
 	int err;
 
@@ -442,8 +442,8 @@ static void spi_sam0_dma_rx_done(struct device *dma_dev, void *arg,
 static int spi_sam0_dma_rx_load(struct device *dev, uint8_t *buf,
 				size_t len)
 {
-	const struct spi_sam0_config *cfg = dev->config_info;
-	struct spi_sam0_data *data = dev->driver_data;
+	const struct spi_sam0_config *cfg = dev->config;
+	struct spi_sam0_data *data = dev->data;
 	SercomSpi *regs = cfg->regs;
 	struct dma_config dma_cfg = { 0 };
 	struct dma_block_config dma_blk = { 0 };
@@ -484,8 +484,8 @@ static int spi_sam0_dma_rx_load(struct device *dev, uint8_t *buf,
 static int spi_sam0_dma_tx_load(struct device *dev, const uint8_t *buf,
 				size_t len)
 {
-	const struct spi_sam0_config *cfg = dev->config_info;
-	struct spi_sam0_data *data = dev->driver_data;
+	const struct spi_sam0_config *cfg = dev->config;
+	struct spi_sam0_data *data = dev->data;
 	SercomSpi *regs = cfg->regs;
 	struct dma_config dma_cfg = { 0 };
 	struct dma_block_config dma_blk = { 0 };
@@ -524,7 +524,7 @@ static int spi_sam0_dma_tx_load(struct device *dev, const uint8_t *buf,
 
 static bool spi_sam0_dma_advance_segment(struct device *dev)
 {
-	struct spi_sam0_data *data = dev->driver_data;
+	struct spi_sam0_data *data = dev->data;
 	uint32_t segment_len;
 
 	/* Pick the shorter buffer of ones that have an actual length */
@@ -549,7 +549,7 @@ static bool spi_sam0_dma_advance_segment(struct device *dev)
 
 static int spi_sam0_dma_advance_buffers(struct device *dev)
 {
-	struct spi_sam0_data *data = dev->driver_data;
+	struct spi_sam0_data *data = dev->data;
 	int retval;
 
 	if (data->dma_segment_len == 0) {
@@ -587,8 +587,8 @@ static void spi_sam0_dma_rx_done(struct device *dma_dev, void *arg,
 				 uint32_t id, int error_code)
 {
 	struct device *dev = arg;
-	const struct spi_sam0_config *cfg = dev->config_info;
-	struct spi_sam0_data *data = dev->driver_data;
+	const struct spi_sam0_config *cfg = dev->config;
+	struct spi_sam0_data *data = dev->data;
 	int retval;
 
 	ARG_UNUSED(id);
@@ -621,8 +621,8 @@ static int spi_sam0_transceive_async(struct device *dev,
 				     const struct spi_buf_set *rx_bufs,
 				     struct k_poll_signal *async)
 {
-	const struct spi_sam0_config *cfg = dev->config_info;
-	struct spi_sam0_data *data = dev->driver_data;
+	const struct spi_sam0_config *cfg = dev->config;
+	struct spi_sam0_data *data = dev->data;
 	int retval;
 
 	if (!data->dma) {
@@ -671,7 +671,7 @@ err_unlock:
 static int spi_sam0_release(struct device *dev,
 			    const struct spi_config *config)
 {
-	struct spi_sam0_data *data = dev->driver_data;
+	struct spi_sam0_data *data = dev->data;
 
 	spi_context_unlock_unconditionally(&data->ctx);
 
@@ -680,8 +680,8 @@ static int spi_sam0_release(struct device *dev,
 
 static int spi_sam0_init(struct device *dev)
 {
-	const struct spi_sam0_config *cfg = dev->config_info;
-	struct spi_sam0_data *data = dev->driver_data;
+	const struct spi_sam0_config *cfg = dev->config;
+	struct spi_sam0_data *data = dev->data;
 	SercomSpi *regs = cfg->regs;
 
 #ifdef MCLK

@@ -280,6 +280,12 @@ class _DTFlashAction(argparse.Action):
             namespace.dt_flash = False
 
 
+class _ToggleAction(argparse.Action):
+
+    def __call__(self, parser, args, ignored, option):
+        setattr(args, self.dest, not option.startswith('--no-'))
+
+
 class ZephyrBinaryRunner(abc.ABC):
     '''Abstract superclass for binary runners (flashers, debuggers).
 
@@ -429,8 +435,9 @@ class ZephyrBinaryRunner(abc.ABC):
         else:
             parser.add_argument('--dt-flash', help=argparse.SUPPRESS)
 
-        parser.add_argument('--erase', action='store_true',
-                            help=('if given, mass erase flash before loading'
+        parser.add_argument('--erase', '--no-erase', nargs=0,
+                            action=_ToggleAction,
+                            help=("mass erase flash before loading, or don't"
                                   if caps.erase else argparse.SUPPRESS))
 
         # Runner-specific options.
@@ -454,7 +461,10 @@ class ZephyrBinaryRunner(abc.ABC):
         if args.erase and not caps.erase:
             _missing_cap(cls, '--erase')
 
-        return cls.do_create(cfg, args)
+        ret = cls.do_create(cfg, args)
+        if args.erase:
+            ret.logger.info('mass erase requested')
+        return ret
 
     @classmethod
     @abc.abstractmethod
@@ -564,7 +574,7 @@ class ZephyrBinaryRunner(abc.ABC):
             return
         subprocess.check_call(cmd)
 
-    def check_output(self, cmd):
+    def check_output(self, cmd, **kwargs):
         '''Subclass subprocess.check_output() wrapper.
 
         Subclasses should use this method to run command in a
@@ -574,7 +584,7 @@ class ZephyrBinaryRunner(abc.ABC):
         self._log_cmd(cmd)
         if _DRY_RUN:
             return b''
-        return subprocess.check_output(cmd)
+        return subprocess.check_output(cmd, **kwargs)
 
     def popen_ignore_int(self, cmd):
         '''Spawn a child command, ensuring it ignores SIGINT.

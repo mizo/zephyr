@@ -56,13 +56,14 @@ target_sources_ifdef(
   kernel PRIVATE
   futex.c
   mem_domain.c
+  cache_handlers.c
   userspace_handler.c
   userspace.c
   )
 
 target_include_directories(kernel PRIVATE
   ${ZEPHYR_BASE}/kernel/include
-  ${ZEPHYR_BASE}/arch/${ARCH}/include
+  ${ARCH_DIR}/${ARCH}/include
   )
 
 add_dependencies(kernel zephyr_generated_headers)

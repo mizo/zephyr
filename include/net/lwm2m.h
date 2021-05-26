@@ -93,6 +93,9 @@ struct lwm2m_ctx {
 	/** Current index of Security Object used for server credentials */
 	int sec_obj_inst;
 
+	/** Current index of Server Object used in this context. */
+	int srv_obj_inst;
+
 	/** Flag to enable BOOTSTRAP interface.  See Section 5.2
 	 *  "Bootstrap Interface" of LwM2M Technical Specification 1.0.2
 	 *  for more information.
@@ -131,7 +134,8 @@ struct lwm2m_ctx {
  * @return Callback returns a pointer to the data buffer or NULL for failure.
  */
 typedef void *(*lwm2m_engine_get_data_cb_t)(uint16_t obj_inst_id,
-					    uint16_t res_id, uint16_t res_inst_id,
+					    uint16_t res_id,
+					    uint16_t res_inst_id,
 					    size_t *data_len);
 
 /**
@@ -781,8 +785,8 @@ int lwm2m_engine_set_res_data(char *pathstr, void *data_ptr, uint16_t data_len,
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_res_data(char *pathstr, void **data_ptr, uint16_t *data_len,
-			      uint8_t *data_flags);
+int lwm2m_engine_get_res_data(char *pathstr, void **data_ptr,
+			      uint16_t *data_len, uint8_t *data_flags);
 
 /**
  * @brief Create a resource instance

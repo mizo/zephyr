@@ -32,7 +32,7 @@ LOG_MODULE_REGISTER(uart_mux, CONFIG_UART_MUX_LOG_LEVEL);
  * as the GSM modem uses global workqueue which causes difficulties if we do
  * the same here. This workqueue is shared between all the DLCI channels.
  */
-K_THREAD_STACK_DEFINE(uart_mux_stack, UART_MUX_WORKQ_STACK_SIZE);
+K_KERNEL_STACK_DEFINE(uart_mux_stack, UART_MUX_WORKQ_STACK_SIZE);
 static struct k_work_q uart_mux_workq;
 
 /* The UART mux contains information about the real UART. It will synchronize
@@ -88,7 +88,7 @@ struct uart_mux_config {
 };
 
 #define DEV_DATA(dev) \
-	((struct uart_mux_dev_data *)(dev)->driver_data)
+	((struct uart_mux_dev_data *)(dev)->data)
 
 struct uart_mux_dev_data {
 	sys_snode_t node;
@@ -151,25 +151,22 @@ static void uart_mux_cb_work(struct k_work *work)
 	dev_data->cb(dev_data->cb_user_data);
 }
 
-static void uart_mux_rx_work(struct k_work *work)
+static int uart_mux_consume_ringbuf(struct uart_mux *uart_mux)
 {
-	struct uart_mux *uart_mux;
 	uint8_t *data;
 	size_t len;
 	int ret;
-
-	uart_mux = CONTAINER_OF(work, struct uart_mux, rx_work);
-
-	/* We have now received muxed data. Push that through GSM mux API which
-	 * will parse it and call proper functions to get the data to the user.
-	 */
 
 	len = ring_buf_get_claim(uart_mux->rx_ringbuf, &data,
 				 CONFIG_UART_MUX_RINGBUF_SIZE);
 	if (len == 0) {
 		LOG_DBG("Ringbuf %p is empty!", uart_mux->rx_ringbuf);
-		return;
+		return 0;
 	}
+
+	/* We have now received muxed data. Push that through GSM mux API which
+	 * will parse it and call proper functions to get the data to the user.
+	 */
 
 	if (IS_ENABLED(CONFIG_UART_MUX_VERBOSE_DEBUG)) {
 		char tmp[sizeof("RECV muxed ") + 10];
@@ -185,6 +182,19 @@ static void uart_mux_rx_work(struct k_work *work)
 	if (ret < 0) {
 		LOG_DBG("Cannot flush ring buffer (%d)", ret);
 	}
+
+	return -EAGAIN;
+}
+
+static void uart_mux_rx_work(struct k_work *work)
+{
+	struct uart_mux *uart_mux =
+		CONTAINER_OF(work, struct uart_mux, rx_work);;
+	int ret;
+
+	do {
+		ret = uart_mux_consume_ringbuf(uart_mux);
+	} while (ret == -EAGAIN);
 }
 
 static void uart_mux_tx_work(struct k_work *work)
@@ -234,7 +244,7 @@ static int uart_mux_init(struct device *dev)
 	k_work_init(&dev_data->cb_work, uart_mux_cb_work);
 
 	LOG_DBG("Device %s dev %p dev_data %p cfg %p created",
-		dev->name, dev, dev_data, dev->config_info);
+		dev->name, dev, dev_data, dev->config);
 
 	return 0;
 }
@@ -848,7 +858,7 @@ static int init_uart_mux(struct device *device)
 	ARG_UNUSED(device);
 
 	k_work_q_start(&uart_mux_workq, uart_mux_stack,
-		       K_THREAD_STACK_SIZEOF(uart_mux_stack),
+		       K_KERNEL_STACK_SIZEOF(uart_mux_stack),
 		       K_PRIO_COOP(UART_MUX_WORKQ_PRIORITY));
 	k_thread_name_set(&uart_mux_workq.thread, "uart_mux_workq");
 

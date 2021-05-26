@@ -586,10 +586,12 @@ static int eth_initialize(struct device *dev)
 
 	/* Start interruption-poll thread */
 	k_thread_create(&dev_data->rx_thread, dev_data->rx_thread_stack,
-			K_THREAD_STACK_SIZEOF(dev_data->rx_thread_stack),
+			K_KERNEL_STACK_SIZEOF(dev_data->rx_thread_stack),
 			rx_thread, (void *) dev, NULL, NULL,
 			K_PRIO_COOP(CONFIG_ETH_STM32_HAL_RX_THREAD_PRIO),
 			0, K_NO_WAIT);
+
+	k_thread_name_set(&dev_data->rx_thread, "stm_eth");
 
 #if defined(CONFIG_SOC_SERIES_STM32H7X)
 	for (uint32_t i = 0; i < ETH_RX_DESC_CNT; i++) {

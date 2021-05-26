@@ -33,7 +33,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "eswifi.h"
 
 #define ESWIFI_WORKQUEUE_STACK_SIZE 1024
-K_THREAD_STACK_DEFINE(eswifi_work_q_stack, ESWIFI_WORKQUEUE_STACK_SIZE);
+K_KERNEL_STACK_DEFINE(eswifi_work_q_stack, ESWIFI_WORKQUEUE_STACK_SIZE);
 
 static struct eswifi_dev eswifi0; /* static instance */
 
@@ -75,7 +75,6 @@ static inline int __parse_ssid(char *str, char *ssid)
 static void __parse_scan_res(char *str, struct wifi_scan_result *res)
 {
 	int field = 0;
-	int ret;
 
 	/* fmt => #001,"SSID",MACADDR,RSSI,BITRATE,MODE,SECURITY,BAND,CHANNEL */
 
@@ -177,13 +176,13 @@ struct eswifi_dev *eswifi_by_iface_idx(uint8_t iface)
 
 static int __parse_ipv4_address(char *str, char *ssid, uint8_t ip[4])
 {
-	unsigned int byte = -1;
+	int byte = -1;
 
 	/* fmt => [JOIN   ] SSID,192.168.2.18,0,0 */
 	while (*str && byte < 4) {
 		if (byte == -1) {
 			if (!strncmp(str, ssid, strlen(ssid))) {
-				byte = 0U;
+				byte = 0;
 				str += strlen(ssid);
 			}
 			str++;
@@ -413,7 +412,7 @@ static void eswifi_iface_init(struct net_if *iface)
 
 static int eswifi_mgmt_scan(struct device *dev, scan_result_cb_t cb)
 {
-	struct eswifi_dev *eswifi = dev->driver_data;
+	struct eswifi_dev *eswifi = dev->data;
 
 	LOG_DBG("");
 
@@ -430,7 +429,7 @@ static int eswifi_mgmt_scan(struct device *dev, scan_result_cb_t cb)
 
 static int eswifi_mgmt_disconnect(struct device *dev)
 {
-	struct eswifi_dev *eswifi = dev->driver_data;
+	struct eswifi_dev *eswifi = dev->data;
 
 	LOG_DBG("");
 
@@ -476,7 +475,7 @@ static int __eswifi_sta_config(struct eswifi_dev *eswifi,
 static int eswifi_mgmt_connect(struct device *dev,
 			       struct wifi_connect_req_params *params)
 {
-	struct eswifi_dev *eswifi = dev->driver_data;
+	struct eswifi_dev *eswifi = dev->data;
 	int err;
 
 	LOG_DBG("");
@@ -504,7 +503,7 @@ void eswifi_async_msg(struct eswifi_dev *eswifi, char *msg, size_t len)
 static int eswifi_mgmt_ap_enable(struct device *dev,
 				 struct wifi_connect_req_params *params)
 {
-	struct eswifi_dev *eswifi = dev->driver_data;
+	struct eswifi_dev *eswifi = dev->data;
 	struct net_if_ipv4 *ipv4 = eswifi->iface->config.ip.ipv4;
 	struct net_if_addr *unicast = NULL;
 	int err = -EIO, i;
@@ -610,7 +609,7 @@ static int eswifi_mgmt_ap_enable(struct device *dev,
 
 static int eswifi_mgmt_ap_disable(struct device *dev)
 {
-	struct eswifi_dev *eswifi = dev->driver_data;
+	struct eswifi_dev *eswifi = dev->data;
 	char cmd[] = "AE\r";
 	int err;
 
@@ -631,7 +630,7 @@ static int eswifi_mgmt_ap_disable(struct device *dev)
 
 static int eswifi_init(struct device *dev)
 {
-	struct eswifi_dev *eswifi = dev->driver_data;
+	struct eswifi_dev *eswifi = dev->data;
 
 	LOG_DBG("");
 
@@ -666,7 +665,7 @@ static int eswifi_init(struct device *dev)
 			   GPIO_OUTPUT_ACTIVE);
 
 	k_work_q_start(&eswifi->work_q, eswifi_work_q_stack,
-		       K_THREAD_STACK_SIZEOF(eswifi_work_q_stack),
+		       K_KERNEL_STACK_SIZEOF(eswifi_work_q_stack),
 		       CONFIG_SYSTEM_WORKQUEUE_PRIORITY - 1);
 
 	k_work_init(&eswifi->request_work, eswifi_request_work);

@@ -27,8 +27,8 @@ static void ipm_console_thread(void *arg1, void *arg2, void *arg3)
 	int pos;
 
 	d = (struct device *)arg1;
-	driver_data = d->driver_data;
-	config_info = d->config_info;
+	driver_data = d->data;
+	config_info = d->config;
 	ARG_UNUSED(arg2);
 	size32 = 0U;
 	pos = 0;
@@ -93,7 +93,7 @@ static void ipm_console_receive_callback(struct device *ipm_dev, void *context,
 
 	ARG_UNUSED(data);
 	d = context;
-	driver_data = d->driver_data;
+	driver_data = d->data;
 
 	/* Should always be at least one free buffer slot */
 	ret = ring_buf_item_put(&driver_data->rb, 0, id, NULL, 0);
@@ -118,8 +118,8 @@ static void ipm_console_receive_callback(struct device *ipm_dev, void *context,
 int ipm_console_receiver_init(struct device *d)
 {
 	const struct ipm_console_receiver_config_info *config_info =
-		d->config_info;
-	struct ipm_console_receiver_runtime_data *driver_data = d->driver_data;
+		d->config;
+	struct ipm_console_receiver_runtime_data *driver_data = d->data;
 	struct device *ipm;
 
 	ipm = device_get_binding(config_info->bind_to);

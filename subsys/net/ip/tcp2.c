@@ -207,10 +207,10 @@ static size_t tcp_data_len(struct net_pkt *pkt)
 {
 	struct tcphdr *th = th_get(pkt);
 	size_t tcp_options_len = (th->th_off - 5) * 4;
-	ssize_t len = net_pkt_get_len(pkt) - net_pkt_ip_hdr_len(pkt) -
+	int len = net_pkt_get_len(pkt) - net_pkt_ip_hdr_len(pkt) -
 		net_pkt_ip_opts_len(pkt) - sizeof(*th) - tcp_options_len;
 
-	return len > 0 ? len : 0;
+	return len > 0 ? (size_t)len : 0;
 }
 
 static const char *tcp_th(struct net_pkt *pkt)
@@ -450,26 +450,33 @@ static const char *tcp_conn_state(struct tcp *conn, struct net_pkt *pkt)
 	return buf;
 }
 
-static uint8_t *tcp_options_get(struct net_pkt *pkt, int tcp_options_len)
+static uint8_t *tcp_options_get(struct net_pkt *pkt, int tcp_options_len,
+				uint8_t *buf, size_t buf_len)
 {
-	static uint8_t options[40]; /* TCP header max options size is 40 */
 	struct net_pkt_cursor backup;
+	int ret;
 
 	net_pkt_cursor_backup(pkt, &backup);
 	net_pkt_cursor_init(pkt);
 	net_pkt_skip(pkt, net_pkt_ip_hdr_len(pkt) + net_pkt_ip_opts_len(pkt) +
 		     sizeof(struct tcphdr));
-	net_pkt_read(pkt, options, tcp_options_len);
+	ret = net_pkt_read(pkt, buf, MIN(tcp_options_len, buf_len));
+	if (ret < 0) {
+		buf = NULL;
+	}
+
 	net_pkt_cursor_restore(pkt, &backup);
 
-	return options;
+	return buf;
 }
 
 static bool tcp_options_check(struct tcp_options *recv_options,
 			      struct net_pkt *pkt, ssize_t len)
 {
+	uint8_t options_buf[40]; /* TCP header max options size is 40 */
 	bool result = len > 0 && ((len % 4) == 0) ? true : false;
-	uint8_t *options = tcp_options_get(pkt, len);
+	uint8_t *options = tcp_options_get(pkt, len, options_buf,
+					   sizeof(options_buf));
 	uint8_t opt, opt_len;
 
 	NET_DBG("len=%zd", len);
@@ -477,7 +484,7 @@ static bool tcp_options_check(struct tcp_options *recv_options,
 	recv_options->mss_found = false;
 	recv_options->wnd_found = false;
 
-	for ( ; len >= 1; options += opt_len, len -= opt_len) {
+	for ( ; options && len >= 1; options += opt_len, len -= opt_len) {
 		opt = options[0];
 
 		if (opt == TCPOPT_END) {
@@ -534,9 +541,9 @@ end:
 	return result;
 }
 
-static size_t tcp_data_get(struct tcp *conn, struct net_pkt *pkt)
+static int tcp_data_get(struct tcp *conn, struct net_pkt *pkt)
 {
-	ssize_t len = tcp_data_len(pkt);
+	int len = tcp_data_len(pkt);
 
 	if (tcp_recv_cb) {
 		tcp_recv_cb(conn, pkt);
@@ -1549,6 +1556,11 @@ int net_tcp_accept(struct net_context *context, net_tcp_accept_cb_t cb,
 	}
 
 	context->user_data = user_data;
+
+	/* Remove the temporary connection handler and register
+	 * a proper now as we have an established connection.
+	 */
+	net_conn_unregister(context->conn_handler);
 
 	return net_conn_register(net_context_get_ip_proto(context),
 				 local_addr.sa_family,
