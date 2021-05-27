@@ -1983,6 +1983,11 @@ static void le_set_ext_scan_param(struct net_buf *buf, struct net_buf **evt)
 		return;
 	}
 
+	// Force override.
+	cmd->phys = BT_HCI_LE_EXT_SCAN_PHY_1M;
+	cmd->p->interval = 0x3;
+	cmd->p->window = 0x3;
+
 	/* TODO: add parameter checks */
 
 	own_addr_type = cmd->own_addr_type;
