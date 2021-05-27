@@ -85,6 +85,7 @@ static uint8_t ll_adv_cmds;
 
 int ll_adv_cmds_set(uint8_t adv_cmds)
 {
+	ll_adv_cmds = LL_ADV_CMDS_ANY;
 	if (!ll_adv_cmds) {
 		ll_adv_cmds = adv_cmds;
 
